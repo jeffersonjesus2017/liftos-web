@@ -1,6 +1,10 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>LIFT.OS</title>
-<!-- v40.1 cache-bust 2026-11-05 -->
-<meta name="claude:viewport-fit-sides" content="cover">
+<!-- v46 wrapped as standalone document for Vercel deploy (fixes missing viewport meta from artifact-only markup) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
@@ -105,7 +109,7 @@ button.ghost.danger:hover{border-color:var(--crit);background:color-mix(in srgb,
 /* Stat tiles */
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 @media (max-width:400px){.tiles{grid-template-columns:1fr 1fr}}
-.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
 .tile .k{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-mute);font-weight:600;margin-bottom:6px}
 .tile .v{font-family:'Bebas Neue',sans-serif;font-size:30px;line-height:1;letter-spacing:0.02em;color:var(--ink)}
 .tile .u{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-mute);margin-left:4px}
@@ -232,7 +236,7 @@ svg.chart .axis{stroke:var(--line);stroke-width:1}
 .fase-resumo .subt{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-mute);text-transform:uppercase;letter-spacing:0.06em;margin-top:4px;margin-bottom:12px}
 .fase-resumo .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 @media (max-width:500px){.fase-resumo .kpis{grid-template-columns:repeat(2,1fr)}}
-.fase-resumo .kpi{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.fase-resumo .kpi{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px;min-width:0}
 .fase-resumo .kpi .k{font-size:9px;text-transform:uppercase;color:var(--ink-mute);letter-spacing:0.06em;font-weight:700;margin-bottom:2px}
 .fase-resumo .kpi .v{font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1;color:var(--ink)}
 .fase-resumo .kpi .v.good{color:var(--ok)}
@@ -432,6 +436,8 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 .search-results button:hover,.search-results button:focus{background:var(--surface-2)}
 .search-results .kc{font-family:'JetBrains Mono',monospace;color:var(--ink-mute);float:right;font-size:12px}
 </style>
+</head>
+<body>
 
 <div class="topbar">
   <div class="brand">LIFT<span class="dot">.</span>OS</div>
@@ -4057,3 +4063,5 @@ bindPhotoDrops();
 renderHeader();
 renderHoje();
 </script>
+</body>
+</html>
