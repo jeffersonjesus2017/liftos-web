@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* Layout: app shell with sticky top bar + bottom tab bar; cards stack on phone */
 :root{
@@ -435,9 +436,43 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 .search-results button:last-child{border-bottom:0}
 .search-results button:hover,.search-results button:focus{background:var(--surface-2)}
 .search-results .kc{font-family:'JetBrains Mono',monospace;color:var(--ink-mute);float:right;font-size:12px}
+
+/* Auth gate */
+.auth-gate{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;padding-top:max(20px,env(safe-area-inset-top,0px));padding-bottom:max(20px,env(safe-area-inset-bottom,0px))}
+.auth-card{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 24px}
+.auth-card .brand{font-family:'Bebas Neue',sans-serif;font-size:32px;letter-spacing:0.02em;text-align:center;margin-bottom:4px}
+.auth-card .brand .dot{color:var(--accent)}
+.auth-card .sub{text-align:center;color:var(--ink-mute);font-size:13px;margin-bottom:22px}
+.auth-card label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:600;margin-bottom:6px;margin-top:14px}
+.auth-card label:first-of-type{margin-top:0}
+.auth-card button.primary{width:100%;margin-top:20px;padding:13px 16px}
+.auth-card .toggle{text-align:center;margin-top:16px;font-size:13px;color:var(--ink-mute)}
+.auth-card .toggle button{appearance:none;background:transparent;border:0;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;padding:0}
+.auth-card .msg{margin-top:14px;font-size:13px;text-align:center;min-height:18px}
+.auth-card .msg.err{color:var(--crit)}
+.auth-card .msg.ok{color:var(--ok)}
+.auth-card .loading{text-align:center;color:var(--ink-mute);font-size:13px}
 </style>
 </head>
 <body>
+
+<div class="auth-gate" id="auth-gate">
+  <div class="auth-card">
+    <div class="brand">LIFT<span class="dot">.</span>OS</div>
+    <div class="sub" id="auth-sub">Entre pra acessar seus dados</div>
+    <form id="auth-form">
+      <label for="auth-email">E-mail</label>
+      <input type="email" id="auth-email" autocomplete="email" required>
+      <label for="auth-pass">Senha</label>
+      <input type="password" id="auth-pass" autocomplete="current-password" required minlength="6">
+      <button type="submit" class="primary" id="auth-submit">Entrar</button>
+    </form>
+    <div class="toggle"><span id="auth-toggle-text">Não tem conta?</span> <button type="button" id="auth-toggle-btn">Criar conta</button></div>
+    <div class="msg" id="auth-msg"></div>
+  </div>
+</div>
+
+<div id="app-root" hidden>
 
 <div class="topbar">
   <div class="brand">LIFT<span class="dot">.</span>OS</div>
@@ -823,6 +858,13 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     </div>
 
     <div class="card">
+      <h3>Conta</h3>
+      <div style="font-size:13px;color:var(--ink-mute);margin-bottom:10px">Logado como <span id="conta-email" style="color:var(--ink);font-weight:600"></span></div>
+      <div id="sync-status" style="font-size:12px;color:var(--ink-mute);margin-bottom:10px"></div>
+      <button class="secondary" id="btn-logout">Sair</button>
+    </div>
+
+    <div class="card">
       <h3>Dados</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="secondary" id="btn-export">Exportar dados</button>
@@ -832,11 +874,11 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
       <details style="margin-top:14px">
         <summary style="color:var(--crit);font-size:12px">⚠ Zona de perigo</summary>
         <div style="margin-top:8px;padding:10px;border:1px dashed var(--crit);border-radius:8px">
-          <div style="font-size:12px;color:var(--ink-mute);margin-bottom:8px">Essa ação apaga TODOS os seus dados (treinos, avaliações, dieta, hidratação). Não há como desfazer. Exporte antes.</div>
+          <div style="font-size:12px;color:var(--ink-mute);margin-bottom:8px">Essa ação apaga TODOS os seus dados (treinos, avaliações, dieta, hidratação) da sua conta. Não há como desfazer. Exporte antes.</div>
           <button class="secondary danger" id="btn-reset">Resetar tudo</button>
         </div>
       </details>
-      <div style="margin-top:10px;font-size:12px;color:var(--ink-mute)">Dados ficam salvos no navegador deste dispositivo. Exporte periodicamente para não perder.</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--ink-mute)">Seus dados ficam salvos na sua conta e sincronizam entre aparelhos automaticamente.</div>
     </div>
   </section>
 </main>
@@ -863,6 +905,8 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     Perfil
   </button>
 </nav>
+
+</div>
 
 <div class="photo-viewer" id="photo-viewer">
   <button class="close" id="pv-close">×</button>
@@ -1160,11 +1204,8 @@ const FOODS = [
 ];
 
 // --------- state helpers ----------
-function loadState(){
-  try{
-    const raw = localStorage.getItem(LS_KEY);
-    if(!raw) return structuredClone(defaultState);
-    const parsed = JSON.parse(raw);
+// aplica todas as migrações de versão sobre um state bruto (de localStorage OU do Supabase)
+function aplicarMigracoes(parsed){
     const merged = {...structuredClone(defaultState), ...parsed};
     // migração: garantir que TREINOJEFFERSON existe e é padrão em instalações antigas
     if(!merged.divisoes['TREINOJEFFERSON']){
@@ -1329,13 +1370,163 @@ function loadState(){
       });
     }
     return merged;
-  }catch(e){return structuredClone(defaultState);}
 }
+// cache local — usado só como fallback offline e pra migrar dados de uma instalação
+// anterior (localStorage) pra conta na nuvem no primeiro login. A fonte da verdade
+// a partir do login é sempre o Supabase.
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return null;
+    return aplicarMigracoes(JSON.parse(raw));
+  }catch(e){ return null; }
+}
+let state = structuredClone(defaultState); // populado de verdade em onAuthed()
+let syncTimer = null;
+let syncPendente = false;
 function saveState(){
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
   catch(e){ toast('Falha ao salvar — storage cheio ou bloqueado'); }
+  agendarSync();
 }
-let state = loadState();
+
+// --------- Supabase: auth + sincronização ----------
+const SUPABASE_URL = 'https://xmxdxevrnvmczzlkxqxy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_CxKPsJr-My_yqWL0S5gQLQ_ixZhPpDj';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let usuarioAtual = null;
+
+function setSyncStatus(txt){
+  const el = document.getElementById('sync-status');
+  if(el) el.textContent = txt;
+}
+
+function agendarSync(){
+  if(!usuarioAtual) return; // ainda sem login — só grava local
+  syncPendente = true;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncAgora, 1200);
+}
+
+async function syncAgora(){
+  if(!usuarioAtual || !syncPendente) return;
+  syncPendente = false;
+  setSyncStatus('Sincronizando…');
+  try{
+    const { error } = await sb.from('app_state').upsert(
+      { user_id: usuarioAtual.id, data: state },
+      { onConflict: 'user_id' }
+    );
+    if(error) throw error;
+    setSyncStatus('Sincronizado ✓ ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
+  }catch(e){
+    console.error('[sync]', e);
+    setSyncStatus('Falha ao sincronizar — tentando de novo em breve');
+    syncPendente = true;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncAgora, 8000);
+  }
+}
+
+function mostrarAuthGate(){
+  document.getElementById('auth-gate').style.display = 'flex';
+  document.getElementById('app-root').hidden = true;
+}
+function esconderAuthGate(){
+  document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('app-root').hidden = false;
+}
+
+async function onAuthed(user){
+  usuarioAtual = user;
+  const emailEl = document.getElementById('conta-email');
+  if(emailEl) emailEl.textContent = user.email;
+  setSyncStatus('Carregando dados…');
+  try{
+    const { data: row, error } = await sb.from('app_state').select('data').eq('user_id', user.id).maybeSingle();
+    if(error) throw error;
+    if(row && row.data && Object.keys(row.data).length){
+      state = aplicarMigracoes(row.data);
+    } else {
+      // primeiro login nessa conta: migra dados locais (se existirem nesse aparelho) pra nuvem
+      state = loadState() || structuredClone(defaultState);
+      await sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' });
+    }
+    setSyncStatus('Sincronizado ✓');
+  }catch(e){
+    console.error('[onAuthed]', e);
+    state = loadState() || structuredClone(defaultState);
+    setSyncStatus('Offline — usando dados salvos neste aparelho');
+  }
+  esconderAuthGate();
+  aplicarTema();
+  bindPhotoDrops();
+  renderHeader();
+  renderHoje();
+}
+
+let authModo = 'login'; // 'login' | 'cadastro'
+function setAuthMsg(txt, tipo){
+  const el = document.getElementById('auth-msg');
+  el.textContent = txt || '';
+  el.className = 'msg' + (tipo ? ' '+tipo : '');
+}
+function traduzErroAuth(msg){
+  if(/Invalid login credentials/i.test(msg)) return 'E-mail ou senha incorretos.';
+  if(/User already registered/i.test(msg)) return 'Já existe uma conta com esse e-mail. Tenta entrar.';
+  if(/Password should be/i.test(msg)) return 'A senha precisa ter pelo menos 6 caracteres.';
+  if(/Email not confirmed/i.test(msg)) return 'Confirma seu e-mail antes de entrar (cheque a caixa de entrada).';
+  return msg;
+}
+
+document.getElementById('auth-toggle-btn').addEventListener('click', ()=>{
+  authModo = authModo === 'login' ? 'cadastro' : 'login';
+  document.getElementById('auth-submit').textContent = authModo === 'login' ? 'Entrar' : 'Criar conta';
+  document.getElementById('auth-sub').textContent = authModo === 'login' ? 'Entre pra acessar seus dados' : 'Crie sua conta pra começar';
+  document.getElementById('auth-toggle-text').textContent = authModo === 'login' ? 'Não tem conta?' : 'Já tem conta?';
+  document.getElementById('auth-toggle-btn').textContent = authModo === 'login' ? 'Criar conta' : 'Entrar';
+  setAuthMsg('');
+});
+
+document.getElementById('auth-form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  const senha = document.getElementById('auth-pass').value;
+  const btn = document.getElementById('auth-submit');
+  btn.disabled = true;
+  setAuthMsg('');
+  try{
+    if(authModo === 'login'){
+      const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+      if(error) throw error;
+    } else {
+      const { data, error } = await sb.auth.signUp({ email, password: senha });
+      if(error) throw error;
+      if(!data.session){
+        setAuthMsg('Conta criada! Verifica seu e-mail pra confirmar antes de entrar.', 'ok');
+      }
+    }
+  }catch(e){
+    setAuthMsg(traduzErroAuth(e.message), 'err');
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+async function initAuth(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session && session.user){ await onAuthed(session.user); }
+  else { mostrarAuthGate(); }
+  sb.auth.onAuthStateChange((event, session)=>{
+    if(event === 'SIGNED_IN' && session && (!usuarioAtual || usuarioAtual.id !== session.user.id)){
+      onAuthed(session.user);
+    }
+    if(event === 'SIGNED_OUT'){
+      usuarioAtual = null;
+      location.reload();
+    }
+  });
+}
 
 // extrai YYYY-MM-DD no fuso LOCAL (não UTC) — evita bug de timezone
 function localDateStr(input){
@@ -4041,6 +4232,12 @@ document.getElementById('btn-reset').addEventListener('click', async ()=>{
   showView('hoje');
 });
 
+document.getElementById('btn-logout').addEventListener('click', async ()=>{
+  const ok = await confirmar('Sair da sua conta?', {title:'Sair', okLabel:'Sair'});
+  if(!ok) return;
+  await sb.auth.signOut();
+});
+
 // --------- init ----------
 function renderHeader(){
   const now = new Date();
@@ -4058,10 +4255,7 @@ function renderHeader(){
   const upStr = uptime>0 ? ` · UP ${uptime}d` : '';
   document.getElementById('today').textContent = `${dow} ${dm}${upStr}`;
 }
-aplicarTema();
-bindPhotoDrops();
-renderHeader();
-renderHoje();
+initAuth();
 </script>
 </body>
 </html>
