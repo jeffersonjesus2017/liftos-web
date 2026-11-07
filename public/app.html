@@ -959,6 +959,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 const LS_KEY = 'cargabruta.v1';
 
 const defaultState = {
+  updatedAt: 0, // epoch ms da última alteração local — usado pra decidir local x nuvem ao retomar o app
   perfil: {
     peso: 76.3, altura: 167, idade: 28, sexo: 'm',
     atividade: 1.55, objetivo: 734,
@@ -1392,6 +1393,7 @@ let state = structuredClone(defaultState); // populado de verdade em onAuthed()
 let syncTimer = null;
 let syncPendente = false;
 function saveState(){
+  state.updatedAt = Date.now();
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
   catch(e){ toast('Falha ao salvar — storage cheio ou bloqueado'); }
   agendarSync();
@@ -1452,13 +1454,28 @@ async function onAuthed(user){
   try{
     const { data: row, error } = await sb.from('app_state').select('data').eq('user_id', user.id).maybeSingle();
     if(error) throw error;
-    if(row && row.data && Object.keys(row.data).length){
-      state = aplicarMigracoes(row.data);
+    const cloud = (row && row.data && Object.keys(row.data).length) ? aplicarMigracoes(row.data) : null;
+    const local = loadState();
+    if(cloud && local){
+      // "mais recente vence": evita que reabrir o app (ex: depois de trocar de app no celular,
+      // que pode recarregar a página antes do debounce de 1200ms sincronizar) apague registros
+      // locais ainda não sincronizados sobrescrevendo com uma versão antiga da nuvem.
+      if((local.updatedAt||0) > (cloud.updatedAt||0)){
+        state = local;
+        sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' }).then(({error})=>{
+          if(error) console.error('[onAuthed] re-sync local->nuvem', error);
+        });
+      } else {
+        state = cloud;
+      }
+    } else if(cloud){
+      state = cloud;
     } else {
       // primeiro login nessa conta: migra dados locais (se existirem nesse aparelho) pra nuvem
-      state = loadState() || structuredClone(defaultState);
+      state = local || structuredClone(defaultState);
       await sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' });
     }
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
     setSyncStatus('Sincronizado ✓');
   }catch(e){
     console.error('[onAuthed]', e);
@@ -1534,6 +1551,22 @@ async function initAuth(){
     }
   });
 }
+
+// Ao minimizar/trocar de app, tenta sincronizar na hora em vez de esperar o debounce —
+// reduz a janela em que um registro feito pouco antes de sair ainda não chegou na nuvem
+// (o que importa porque, ao voltar, o app pode recarregar do zero e buscar a nuvem de novo).
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'hidden' && syncPendente){
+    clearTimeout(syncTimer);
+    syncAgora();
+  }
+});
+window.addEventListener('pagehide', ()=>{
+  if(syncPendente){
+    clearTimeout(syncTimer);
+    syncAgora();
+  }
+});
 
 // extrai YYYY-MM-DD no fuso LOCAL (não UTC) — evita bug de timezone
 function localDateStr(input){
