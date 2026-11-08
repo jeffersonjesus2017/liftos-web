@@ -869,6 +869,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
       <div style="font-size:13px;color:var(--ink-mute);margin-bottom:10px">Logado como <span id="conta-email" style="color:var(--ink);font-weight:600"></span></div>
       <div id="sync-status" style="font-size:12px;color:var(--ink-mute);margin-bottom:10px"></div>
       <button class="secondary" id="btn-logout">Sair</button>
+      <button class="ghost" id="btn-copiar-diag" style="margin-top:8px">Copiar log de diagnóstico</button>
     </div>
 
     <div class="card">
@@ -1392,6 +1393,25 @@ function loadState(){
 let state = structuredClone(defaultState); // populado de verdade em onAuthed()
 let syncTimer = null;
 let syncPendente = false;
+
+// --------- log de diagnóstico ----------
+// registra eventos de ciclo de vida (visibilidade, sync, onAuthed) pra conseguir
+// investigar de verdade relatos de "sumiu registro" em vez de só supor a causa.
+const DEBUG_LOG_KEY = 'cargabruta.debuglog.v1';
+function logDebug(msg){
+  try{
+    const log = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]');
+    log.push({ t: new Date().toISOString(), msg });
+    while(log.length > 150) log.shift();
+    localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(log));
+  }catch(e){ /* diagnóstico não pode quebrar o app */ }
+}
+document.addEventListener('visibilitychange', ()=>{
+  logDebug(`visibilitychange -> ${document.visibilityState} | syncPendente=${syncPendente}`);
+});
+window.addEventListener('pageshow', (e)=>{
+  logDebug(`pageshow | persisted=${e.persisted} | sessaoAtiva=${!!state.sessaoAtiva}`);
+});
 function saveState(){
   state.updatedAt = Date.now();
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
@@ -1421,6 +1441,7 @@ async function syncAgora(){
   if(!usuarioAtual || !syncPendente) return;
   syncPendente = false;
   setSyncStatus('Sincronizando…');
+  logDebug(`syncAgora: start | updatedAt=${state.updatedAt} | sessaoAtiva=${!!state.sessaoAtiva}`);
   try{
     const { error } = await sb.from('app_state').upsert(
       { user_id: usuarioAtual.id, data: state },
@@ -1428,9 +1449,11 @@ async function syncAgora(){
     );
     if(error) throw error;
     setSyncStatus('Sincronizado ✓ ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
+    logDebug('syncAgora: ok');
   }catch(e){
     console.error('[sync]', e);
     setSyncStatus('Falha ao sincronizar — tentando de novo em breve');
+    logDebug(`syncAgora: ERRO ${e && e.message}`);
     syncPendente = true;
     clearTimeout(syncTimer);
     syncTimer = setTimeout(syncAgora, 8000);
@@ -1451,28 +1474,34 @@ async function onAuthed(user){
   const emailEl = document.getElementById('conta-email');
   if(emailEl) emailEl.textContent = user.email;
   setSyncStatus('Carregando dados…');
+  logDebug('onAuthed: chamado');
   try{
     const { data: row, error } = await sb.from('app_state').select('data').eq('user_id', user.id).maybeSingle();
     if(error) throw error;
     const cloud = (row && row.data && Object.keys(row.data).length) ? aplicarMigracoes(row.data) : null;
     const local = loadState();
+    logDebug(`onAuthed: cloud.updatedAt=${cloud?cloud.updatedAt:'null'} local.updatedAt=${local?local.updatedAt:'null'}`);
     if(cloud && local){
       // "mais recente vence": evita que reabrir o app (ex: depois de trocar de app no celular,
       // que pode recarregar a página antes do debounce de 1200ms sincronizar) apague registros
       // locais ainda não sincronizados sobrescrevendo com uma versão antiga da nuvem.
       if((local.updatedAt||0) > (cloud.updatedAt||0)){
         state = local;
+        logDebug('onAuthed: usou LOCAL (mais recente) e vai re-sincronizar pra nuvem');
         sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' }).then(({error})=>{
           if(error) console.error('[onAuthed] re-sync local->nuvem', error);
         });
       } else {
         state = cloud;
+        logDebug('onAuthed: usou NUVEM (mais recente ou igual)');
       }
     } else if(cloud){
       state = cloud;
+      logDebug('onAuthed: usou NUVEM (sem cache local)');
     } else {
       // primeiro login nessa conta: migra dados locais (se existirem nesse aparelho) pra nuvem
       state = local || structuredClone(defaultState);
+      logDebug('onAuthed: primeiro login — migrou local (ou default) pra nuvem');
       await sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' });
     }
     localStorage.setItem(LS_KEY, JSON.stringify(state));
@@ -1538,15 +1567,19 @@ document.getElementById('auth-form').addEventListener('submit', async (e)=>{
 });
 
 async function initAuth(){
+  logDebug('initAuth: boot');
   const { data:{ session } } = await sb.auth.getSession();
+  logDebug(`initAuth: getSession -> ${session ? 'tem sessão' : 'sem sessão'}`);
   if(session && session.user){ await onAuthed(session.user); }
   else { mostrarAuthGate(); }
   sb.auth.onAuthStateChange((event, session)=>{
+    logDebug(`onAuthStateChange: ${event}`);
     if(event === 'SIGNED_IN' && session && (!usuarioAtual || usuarioAtual.id !== session.user.id)){
       onAuthed(session.user);
     }
     if(event === 'SIGNED_OUT'){
       usuarioAtual = null;
+      logDebug('onAuthStateChange: SIGNED_OUT -> vai recarregar a página');
       location.reload();
     }
   });
@@ -4276,6 +4309,19 @@ document.getElementById('btn-logout').addEventListener('click', async ()=>{
   const ok = await confirmar('Sair da sua conta?', {title:'Sair', okLabel:'Sair'});
   if(!ok) return;
   await sb.auth.signOut();
+});
+
+document.getElementById('btn-copiar-diag').addEventListener('click', async ()=>{
+  let log = [];
+  try{ log = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]'); }catch(e){}
+  const texto = log.map(l=>`${l.t}  ${l.msg}`).join('\n') || '(log vazio)';
+  try{
+    await navigator.clipboard.writeText(texto);
+    toast('Log copiado — cola numa mensagem pra mim');
+  }catch(e){
+    // fallback pra navegadores sem permissão de clipboard
+    prompt('Copia manualmente o texto abaixo:', texto);
+  }
 });
 
 // --------- init ----------
