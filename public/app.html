@@ -1695,6 +1695,11 @@ document.addEventListener('keydown', e=>{
   }
 });
 
+// --------- service worker (necessário pro iOS mostrar notificação local) ----------
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(e=>console.error('[sw]', e));
+}
+
 // --------- rest timer ----------
 let restState = {
   total: 0,
@@ -1702,7 +1707,31 @@ let restState = {
   intervalId: null,
   startTs: 0,
 };
+function pedirPermissaoNotificacao(){
+  try{
+    if(!('Notification' in window)) return;
+    if(Notification.permission === 'default'){
+      Notification.requestPermission().catch(()=>{});
+    }
+  }catch(e){ /* navegador sem suporte — segue sem notificação */ }
+}
+async function notificarDescansoCompleto(){
+  try{
+    if(!('Notification' in window) || Notification.permission !== 'granted') return;
+    if(!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification('Descanso completo 💪', {
+      body: 'Hora da próxima série.',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200, 100, 400],
+      tag: 'lift-os-rest-timer',
+      renotify: true,
+    });
+  }catch(e){ console.error('[notificarDescansoCompleto]', e); }
+}
 function iniciarRestTimer(segundos){
+  pedirPermissaoNotificacao();
   const timer = document.getElementById('rest-timer');
   const label = document.getElementById('rt-label');
   // reset estado anterior
@@ -1746,10 +1775,13 @@ function pararRestTimer(ehDone){
   if(ehDone){
     timer.classList.add('done');
     document.getElementById('rt-label').textContent = 'Descanso completo';
-    // vibração
-    try {
-      if(navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
-    } catch(e){}
+    if(document.visibilityState === 'hidden'){
+      // app em segundo plano (outro app aberto) — avisa por notificação do sistema
+      notificarDescansoCompleto();
+    } else {
+      // app visível — vibração já é aviso suficiente
+      try { if(navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); } catch(e){}
+    }
     // esconde automaticamente após 10s se usuário não fechar
     setTimeout(()=>{
       if(timer.classList.contains('done')){
