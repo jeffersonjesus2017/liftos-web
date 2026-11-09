@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'LIFT.OS',
+  title: 'LIFT',
   description: 'Treino, dieta e evolução — app pessoal de Jefferson',
   manifest: '/manifest.json',
   icons: {

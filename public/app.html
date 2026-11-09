@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>LIFT.OS</title>
+<title>LIFT</title>
 <!-- v46 wrapped as standalone document for Vercel deploy (fixes missing viewport meta from artifact-only markup) -->
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32">
@@ -487,7 +487,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 <div class="auth-gate" id="auth-gate" style="display:none">
   <div class="auth-card">
-    <div class="brand"><img src="/icon-192.png" alt=""> LIFT<span class="dot">.</span>OS</div>
+    <div class="brand"><img src="/icon-192.png" alt=""> LIFT</div>
     <div class="sub" id="auth-sub">Entre pra acessar seus dados</div>
     <form id="auth-form">
       <label for="auth-email">E-mail</label>
@@ -504,7 +504,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 <div id="app-root" hidden>
 
 <div class="topbar">
-  <div class="brand"><img src="/icon-192.png" alt=""> LIFT<span class="dot">.</span>OS</div>
+  <div class="brand"><img src="/icon-192.png" alt=""> LIFT</div>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="date" id="today"></div>
     <button id="btn-tema-quick" title="Alternar tema" style="appearance:none;background:transparent;border:1px solid var(--line);color:var(--ink-dim);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">🌓</button>
@@ -975,7 +975,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 // ============================================================
-// LIFT.OS — treino + dieta app
+// LIFT — treino + dieta app
 // Estado persistido em localStorage com try/catch.
 // ============================================================
 
@@ -4091,12 +4091,12 @@ document.getElementById('btn-export').addEventListener('click', async ()=>{
     try {
       const file = new File([data], nomeArquivo, {type:'application/json'});
       if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:'LIFT.OS Backup', text:'Backup dos dados do LIFT.OS'});
+        await navigator.share({files:[file], title:'LIFT Backup', text:'Backup dos dados do LIFT'});
         shareFileOk = true;
         toast('Compartilhado ✓');
       } else {
         // fallback: compartilhar como texto
-        await navigator.share({title:'LIFT.OS Backup', text:data});
+        await navigator.share({title:'LIFT Backup', text:data});
         shareFileOk = true;
         toast('Compartilhado ✓');
       }
@@ -4165,7 +4165,7 @@ async function gerarRelatorioPDF(){
   doc.setTextColor(255);
   doc.setFontSize(18);
   doc.setFont(undefined, 'bold');
-  doc.text('LIFT.OS — Relatório Mensal', 15, 12);
+  doc.text('LIFT — Relatório Mensal', 15, 12);
   doc.setFontSize(10);
   doc.setFont(undefined, 'normal');
   doc.text(`${mesRef.charAt(0).toUpperCase()+mesRef.slice(1)} · Gerado em ${dataRef}`, 15, 19);
@@ -4327,7 +4327,7 @@ async function gerarRelatorioPDF(){
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(120);
-    doc.text(`LIFT.OS · Página ${i}/${nPages} · ${dataRef}`, 105, 290, {align:'center'});
+    doc.text(`LIFT · Página ${i}/${nPages} · ${dataRef}`, 105, 290, {align:'center'});
   }
 
   const nomeArq = `liftos-relatorio-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}.pdf`;
@@ -4339,7 +4339,7 @@ async function gerarRelatorioPDF(){
     try {
       const file = new File([blob], nomeArq, {type:'application/pdf'});
       if(navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:'LIFT.OS Relatório Mensal'});
+        await navigator.share({files:[file], title:'LIFT Relatório Mensal'});
         toast('Compartilhado ✓');
         return;
       }
@@ -4388,7 +4388,7 @@ function abrirPDFViewer(blob, nomeArq){
       if(navigator.share && navigator.canShare){
         const file = new File([blob], nomeArq, {type:'application/pdf'});
         if(navigator.canShare({files:[file]})){
-          await navigator.share({files:[file], title:'LIFT.OS Relatório Mensal'});
+          await navigator.share({files:[file], title:'LIFT Relatório Mensal'});
           toast('Compartilhado ✓');
           return;
         }

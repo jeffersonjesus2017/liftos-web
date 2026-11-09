@@ -2,7 +2,7 @@
   "name": "liftos-web",
   "version": "1.0.0",
   "private": true,
-  "description": "LIFT.OS — app pessoal de treino e dieta",
+  "description": "LIFT — app pessoal de treino e dieta",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

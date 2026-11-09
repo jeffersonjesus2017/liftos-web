@@ -1,6 +1,6 @@
 {
-  "name": "LIFT.OS",
-  "short_name": "LIFT.OS",
+  "name": "LIFT",
+  "short_name": "LIFT",
   "description": "Treino, dieta e evolução corporal — tudo num só lugar.",
   "start_url": "/app.html",
   "display": "standalone",
