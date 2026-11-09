@@ -1709,18 +1709,34 @@ let restState = {
 };
 function pedirPermissaoNotificacao(){
   try{
-    if(!('Notification' in window)) return;
-    if(Notification.permission === 'default'){
-      Notification.requestPermission().catch(()=>{});
+    if(!('Notification' in window)){
+      logDebug('pedirPermissaoNotificacao: Notification API não existe nesse navegador');
+      return;
     }
-  }catch(e){ /* navegador sem suporte — segue sem notificação */ }
+    logDebug(`pedirPermissaoNotificacao: permission atual = ${Notification.permission} | standalone=${window.navigator.standalone}`);
+    if(Notification.permission === 'default'){
+      Notification.requestPermission().then(p=>{
+        logDebug(`pedirPermissaoNotificacao: requestPermission resolveu com "${p}"`);
+      }).catch(e=>{
+        logDebug(`pedirPermissaoNotificacao: requestPermission ERRO ${e && e.message}`);
+      });
+    }
+  }catch(e){
+    logDebug(`pedirPermissaoNotificacao: EXCEPTION ${e && e.message}`);
+  }
 }
 async function notificarDescansoCompleto(){
   try{
-    if(!('Notification' in window) || Notification.permission !== 'granted') return;
-    if(!('serviceWorker' in navigator)) return;
+    if(!('Notification' in window) || Notification.permission !== 'granted'){
+      logDebug(`notificarDescansoCompleto: abortado (Notification ${('Notification' in window) ? Notification.permission : 'inexistente'})`);
+      return;
+    }
+    if(!('serviceWorker' in navigator)){
+      logDebug('notificarDescansoCompleto: abortado (sem serviceWorker)');
+      return;
+    }
     const reg = await navigator.serviceWorker.ready;
-    reg.showNotification('Descanso completo 💪', {
+    await reg.showNotification('Descanso completo 💪', {
       body: 'Hora da próxima série.',
       icon: '/icon-192.png',
       badge: '/icon-192.png',
@@ -1728,7 +1744,11 @@ async function notificarDescansoCompleto(){
       tag: 'lift-os-rest-timer',
       renotify: true,
     });
-  }catch(e){ console.error('[notificarDescansoCompleto]', e); }
+    logDebug('notificarDescansoCompleto: notificação disparada');
+  }catch(e){
+    logDebug(`notificarDescansoCompleto: ERRO ${e && e.message}`);
+    console.error('[notificarDescansoCompleto]', e);
+  }
 }
 function iniciarRestTimer(segundos){
   pedirPermissaoNotificacao();
@@ -2457,6 +2477,10 @@ function renderSessaoAtiva(){
   // botões de descanso
   container.querySelectorAll('.btn-rest').forEach(b=>{
     b.addEventListener('click', async ()=>{
+      // pede permissão de notificação já no clique direto, antes de qualquer await —
+      // no iOS, pedir depois de um await (ex: o prompt do "descanso custom") quebra o
+      // gesto do usuário e o navegador ignora a solicitação sem avisar nada.
+      pedirPermissaoNotificacao();
       const v = b.dataset.rest;
       if(v === 'custom'){
         const txt = await prompt2('Descanso em segundos (máx 600):', '90', {title:'Descanso custom', type:'number'});
