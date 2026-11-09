@@ -3038,8 +3038,11 @@ function renderHistCorpo(){
     // helper: encontra a PRIMEIRA avaliação da MESMA FASE com aquela métrica
     // (base do ciclo atual — ignora avaliações de fases anteriores como cutting prévio)
     const faseAtual = ult.fase || null;
+    // compara sempre com a avaliação IMEDIATAMENTE ANTERIOR da mesma fase (não a primeira
+    // da fase) — o que importa no dia a dia é "o que mudou desde a última vez", não o
+    // acumulado desde o início do ciclo (isso fica em "ver evolução desde o início").
     const valorAnterior = (k, idxAtual)=>{
-      for(let i=0; i<idxAtual; i++){
+      for(let i=idxAtual-1; i>=0; i--){
         // ignora avaliações de fase diferente da atual
         if(faseAtual && list[i].fase && list[i].fase !== faseAtual) continue;
         const v = list[i][k];
@@ -3066,7 +3069,7 @@ function renderHistCorpo(){
           else if(m.bom==='down') cls = d<0?'goal-ok':'goal-bad';
           else cls = d>0?'up':'down';
           const dataPrev = new Date(prev.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-          deltaHtml = `<span class="delta ${cls}" title="vs ${dataPrev} (${prev.val}${m.unit}) — base inicial">${arrow} ${dAbs.toFixed(1)}</span>`;
+          deltaHtml = `<span class="delta ${cls}" title="vs ${dataPrev} (${prev.val}${m.unit})">${arrow} ${dAbs.toFixed(1)}</span>`;
         }
       } else {
         deltaHtml = `<span class="delta flat" title="primeira medida">● novo</span>`;
@@ -3095,12 +3098,13 @@ function renderHistCorpo(){
       `;
     };
     const dataStr = new Date(ult.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
-    // primeira avaliação da MESMA fase atual
-    const primeiraNaFase = list.find(a=>a.fase === faseAtual);
-    const refDate = primeiraNaFase && primeiraNaFase !== ult
-      ? `vs ${new Date(primeiraNaFase.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})} (início ${faseAtual})`
+    // avaliação anterior (mesma fase) usada como referência dos deltas acima
+    const antNaFase = ant; // já é a imediatamente anterior na lista geral; os tiles filtram por fase internamente
+    const refDate = antNaFase
+      ? `vs ${new Date(antNaFase.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})} (anterior)`
       : 'primeira avaliação';
     const faseLabel = faseAtual ? ` · ${faseAtual.toUpperCase()}` : '';
+    const resumoFaseHtml = renderResumoFase();
     el.innerHTML = `
       <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-mute);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">
         ${dataStr}${faseLabel} · ${refDate}
@@ -3111,7 +3115,16 @@ function renderHistCorpo(){
       ${renderVShape(ult)}
       ${renderFotosRow(ult)}
       ${ult.obs?`<div style="margin-top:12px;padding:10px;background:var(--surface-2);border-radius:8px;font-size:13px;color:var(--ink-dim)"><strong>Obs:</strong> ${ult.obs}</div>`:''}
+      ${resumoFaseHtml ? `
+        <button class="ac-ver-mais" id="btn-ver-evolucao-fase" style="margin-top:14px">${_verEvolucaoFase?'Ver menos ▲':'Ver evolução desde o início da fase ▼'}</button>
+        <div id="evolucao-fase-wrap" style="display:${_verEvolucaoFase?'block':'none'};margin-top:10px">${resumoFaseHtml}</div>
+      ` : ''}
     `;
+    const btnEvFase = document.getElementById('btn-ver-evolucao-fase');
+    if(btnEvFase) btnEvFase.addEventListener('click', ()=>{
+      _verEvolucaoFase = !_verEvolucaoFase;
+      renderHistCorpo();
+    });
     // bind clique nas fotos
     el.querySelectorAll('.photos-row .ph').forEach(ph=>{
       ph.onclick = ()=>abrirFoto(ph.dataset.src);
@@ -3298,21 +3311,13 @@ function renderResumoFase(){
 
 // conjunto de cards já expandidos (sobrevive a re-render, some ao trocar de view)
 const _avalExpandido = new Set();
+// se o bloco "evolução desde o início da fase" está aberto no destaque do topo
+let _verEvolucaoFase = false;
 
 function renderTabelaAval(){
   const tab = document.getElementById('tab-aval');
   const list = [...state.avaliacoes].sort((a,b)=>b.data.localeCompare(a.data));
   if(!list.length){ tab.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:var(--ink-mute);font-style:italic">Nenhuma avaliação ainda</div>'; return; }
-
-  // injeta o resumo acima da lista
-  const container = tab.parentElement; // .card
-  let resumoEl = container.querySelector('.fase-resumo-wrap');
-  if(!resumoEl){
-    resumoEl = document.createElement('div');
-    resumoEl.className = 'fase-resumo-wrap';
-    container.insertBefore(resumoEl, container.querySelector('h3').nextSibling);
-  }
-  resumoEl.innerHTML = renderResumoFase();
 
   // resumo direto: o que você olha todo dia
   const colsResumo = ['peso','pctG','mm','mg'];
