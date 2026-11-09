@@ -3346,7 +3346,6 @@ function renderTabelaAval(){
     let pctHtml = '';
     if(prev !== null && prev !== 0){
       const diff = +(v - prev).toFixed(2);
-      const pct = +(diff/prev*100).toFixed(1);
       if(Math.abs(diff) < 0.05){
         pctHtml = `<span class="pct neutral">◆ 0 ${m.unit}</span>`;
       } else {
@@ -3355,8 +3354,7 @@ function renderTabelaAval(){
         if(m.bom==='up') cls = diff>0?'good':'bad';
         else if(m.bom==='down') cls = diff<0?'good':'bad';
         const sgn = diff>0?'+':'';
-        const sgnPct = pct>0?'+':'';
-        pctHtml = `<span class="pct ${cls}">${arrow} ${sgn}${diff}${m.unit} · ${sgnPct}${pct}%</span>`;
+        pctHtml = `<span class="pct ${cls}">${arrow} ${sgn}${diff}${m.unit}</span>`;
       }
     }
     return `<div class="cell"><span class="lbl">${m.lbl}</span><span class="val">${v} ${m.unit}</span>${pctHtml}</div>`;
