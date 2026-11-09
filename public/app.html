@@ -237,6 +237,28 @@ svg.chart .axis{stroke:var(--line);stroke-width:1}
 .fase-badge.manutencao{background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
 .fase-badge.transicao{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
 
+.aval-list{display:flex;flex-direction:column;gap:8px}
+.aval-card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface)}
+.aval-card .ac-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.aval-card .ac-data{font-weight:700;font-size:13px}
+.aval-card .ac-actions{display:flex;align-items:center;gap:10px}
+.aval-card .ac-actions button{appearance:none;background:transparent;border:0;cursor:pointer;font-size:13px;padding:0 2px}
+.aval-card .ac-resumo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:0}
+.aval-card .ac-resumo .cell{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}
+.aval-card .ac-resumo .lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700}
+.aval-card .ac-resumo .val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--ink)}
+.aval-card .ac-resumo .pct{font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:2px}
+.aval-card .ac-resumo .pct.good{color:var(--ok)}
+.aval-card .ac-resumo .pct.bad{color:var(--crit)}
+.aval-card .ac-resumo .pct.neutral{color:var(--ink-mute)}
+.aval-card .ac-detalhes{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.aval-card.expandido .ac-detalhes{display:block}
+.aval-card .ac-detalhes-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 12px}
+.aval-card .ac-detalhes-grid .cell{display:flex;flex-direction:column;gap:1px;min-width:0}
+.aval-card .ac-detalhes-grid .lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-mute)}
+.aval-card .ac-detalhes-grid .val{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600}
+.aval-card .ac-ver-mais{background:none;border:0;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0;margin-top:8px;text-transform:uppercase;letter-spacing:0.04em}
+
 /* Resumo fase */
 .fase-resumo{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 12%,var(--surface)),var(--surface));border:1px solid var(--accent);border-radius:10px;padding:14px;margin-bottom:12px}
 .fase-resumo .titulo{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:0.04em;color:var(--accent);line-height:1}
@@ -667,7 +689,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 
       <div class="card">
         <h3>Histórico completo</h3>
-        <div style="overflow-x:auto;margin:0 -4px"><table class="histab" id="tab-aval"></table></div>
+        <div class="aval-list" id="tab-aval"></div>
       </div>
 
       <div class="card">
@@ -3274,14 +3296,16 @@ function renderResumoFase(){
   `;
 }
 
+// conjunto de cards já expandidos (sobrevive a re-render, some ao trocar de view)
+const _avalExpandido = new Set();
+
 function renderTabelaAval(){
   const tab = document.getElementById('tab-aval');
-  const listAsc = [...state.avaliacoes].sort((a,b)=>a.data.localeCompare(b.data));
   const list = [...state.avaliacoes].sort((a,b)=>b.data.localeCompare(a.data));
-  if(!list.length){ tab.innerHTML = '<tr><td style="padding:20px;text-align:center;color:var(--ink-mute);font-style:italic">Nenhuma avaliação ainda</td></tr>'; return; }
+  if(!list.length){ tab.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:var(--ink-mute);font-style:italic">Nenhuma avaliação ainda</div>'; return; }
 
-  // injeta o resumo acima da tabela
-  const container = tab.parentElement.parentElement; // .card
+  // injeta o resumo acima da lista
+  const container = tab.parentElement; // .card
   let resumoEl = container.querySelector('.fase-resumo-wrap');
   if(!resumoEl){
     resumoEl = document.createElement('div');
@@ -3290,8 +3314,10 @@ function renderTabelaAval(){
   }
   resumoEl.innerHTML = renderResumoFase();
 
-  const cols = ['peso','mm','mg','pctG','c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant','d_peitoral','d_triceps','d_abdom','d_coxa','d_axilar','d_subesc','d_supra','d_soma'];
-  const header = ['Data', ...cols.map(k=>METRICAS[k].lbl)];
+  // resumo direto: o que você olha todo dia
+  const colsResumo = ['peso','pctG','mm','mg'];
+  // detalhes: só quando pedir pra ver
+  const colsDetalhe = ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant','d_peitoral','d_triceps','d_abdom','d_coxa','d_axilar','d_subesc','d_supra','d_soma'];
 
   // helper: encontra anterior da MESMA fase pra uma métrica específica
   // list está desc (recente primeiro), então "anterior" = índice maior
@@ -3305,51 +3331,74 @@ function renderTabelaAval(){
     return null;
   };
 
-  tab.innerHTML = `
-    <thead><tr>${header.map(h=>`<th>${h}</th>`).join('')}<th></th></tr></thead>
-    <tbody>${list.map((a,i)=>{
-      const data = new Date(a.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'});
-      const faseClass = a.fase ? `fase-${a.fase}` : '';
-      const faseBadge = a.fase ? `<span class="fase-badge ${a.fase}">${a.fase.slice(0,3)}</span>` : '';
-      return `<tr class="${faseClass}">
-        <td>${data}${faseBadge}</td>
-        ${cols.map(k=>{
-          const v = a[k];
-          if(v===undefined || v===null || v==='') return `<td><div class="cell"><span class="val" style="color:var(--ink-mute)">—</span></div></td>`;
-          const prev = anteriorNaFase(a, i, k);
-          const m = METRICAS[k];
-          let pctHtml = '';
-          if(prev !== null && prev !== 0){
-            const diff = +(v - prev).toFixed(2);
-            const pct = +(diff/prev*100).toFixed(1);
-            const dAbs = Math.abs(diff);
-            if(dAbs < 0.05){
-              pctHtml = `<span class="pct neutral">◆ 0 ${m.unit}</span>`;
-            } else {
-              const arrow = diff>0?'▲':'▼';
-              let cls='neutral';
-              if(m.bom==='up') cls = diff>0?'good':'bad';
-              else if(m.bom==='down') cls = diff<0?'good':'bad';
-              const sgn = diff>0?'+':'';
-              const sgnPct = pct>0?'+':'';
-              pctHtml = `<span class="pct ${cls}">${arrow} ${sgn}${diff}${m.unit} · ${sgnPct}${pct}%</span>`;
-            }
-          }
-          return `<td><div class="cell"><span class="val">${v}</span>${pctHtml}</div></td>`;
-        }).join('')}
-        <td style="white-space:nowrap">
-          <button class="rm" data-edit-aval="${a.data}" style="appearance:none;background:transparent;border:0;color:var(--accent);cursor:pointer;font-size:13px;padding:0 4px" title="Editar">✎</button>
-          <button class="rm" data-del-aval="${a.data}-${i}" style="appearance:none;background:transparent;border:0;color:var(--ink-mute);cursor:pointer;font-size:14px" title="Remover">×</button>
-        </td>
-      </tr>`;
-    }).join('')}</tbody>
-  `;
+  const celulaComVariacao = (a, idxDesc, k)=>{
+    const v = a[k];
+    const m = METRICAS[k];
+    if(v===undefined || v===null || v===''){
+      return `<div class="cell"><span class="lbl">${m.lbl}</span><span class="val" style="color:var(--ink-mute)">—</span></div>`;
+    }
+    const prev = anteriorNaFase(a, idxDesc, k);
+    let pctHtml = '';
+    if(prev !== null && prev !== 0){
+      const diff = +(v - prev).toFixed(2);
+      const pct = +(diff/prev*100).toFixed(1);
+      if(Math.abs(diff) < 0.05){
+        pctHtml = `<span class="pct neutral">◆ 0 ${m.unit}</span>`;
+      } else {
+        const arrow = diff>0?'▲':'▼';
+        let cls='neutral';
+        if(m.bom==='up') cls = diff>0?'good':'bad';
+        else if(m.bom==='down') cls = diff<0?'good':'bad';
+        const sgn = diff>0?'+':'';
+        const sgnPct = pct>0?'+':'';
+        pctHtml = `<span class="pct ${cls}">${arrow} ${sgn}${diff}${m.unit} · ${sgnPct}${pct}%</span>`;
+      }
+    }
+    return `<div class="cell"><span class="lbl">${m.lbl}</span><span class="val">${v} ${m.unit}</span>${pctHtml}</div>`;
+  };
+
+  tab.innerHTML = list.map((a,i)=>{
+    const data = new Date(a.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    const faseBadge = a.fase ? `<span class="fase-badge ${a.fase}">${a.fase.slice(0,3)}</span>` : '';
+    const expandido = _avalExpandido.has(a.data);
+    const temDetalhe = colsDetalhe.some(k=>a[k]!==undefined && a[k]!=='' && a[k]!==null);
+    return `
+      <div class="aval-card${expandido?' expandido':''}" data-aval-card="${a.data}">
+        <div class="ac-head">
+          <div class="ac-data">${data}${faseBadge}</div>
+          <div class="ac-actions">
+            <button data-edit-aval="${a.data}" style="color:var(--accent)" title="Editar">✎</button>
+            <button data-del-aval="${a.data}-${i}" style="color:var(--ink-mute)" title="Remover">×</button>
+          </div>
+        </div>
+        <div class="ac-resumo">
+          ${colsResumo.map(k=>celulaComVariacao(a,i,k)).join('')}
+        </div>
+        ${temDetalhe ? `
+          <button class="ac-ver-mais" data-toggle-aval="${a.data}">${expandido?'Ver menos ▲':'Ver detalhes ▼'}</button>
+          <div class="ac-detalhes">
+            <div class="ac-detalhes-grid">
+              ${colsDetalhe.map(k=>celulaComVariacao(a,i,k)).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  tab.querySelectorAll('[data-toggle-aval]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const data = b.dataset.toggleAval;
+      if(_avalExpandido.has(data)) _avalExpandido.delete(data);
+      else _avalExpandido.add(data);
+      renderTabelaAval();
+    });
+  });
   tab.querySelectorAll('[data-edit-aval]').forEach(b=>{
     b.addEventListener('click', ()=>iniciarEdicaoAval(b.dataset.editAval));
   });
   tab.querySelectorAll('[data-del-aval]').forEach(b=>{
     b.addEventListener('click', async ()=>{
-      const [dt] = b.dataset.delAval.split('-').slice(0,3).join('-');
       const okRem = await confirmar('Remover esta avaliação?', {okLabel:'Remover', warn:true});
       if(!okRem) return;
       // reconstrói chave composta (data pode ter -)
