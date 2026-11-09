@@ -1853,23 +1853,42 @@ document.querySelectorAll('[data-rt-add]').forEach(b=>{
 });
 
 // --------- cálculos de perfil ----------
+// soma kcal/macros da 1ª opção de cada refeição do plano alimentar real
+// (o que o nutricionista prescreveu), pra usar como meta do dia em vez
+// de uma fórmula genérica de TMB.
+function metaDoPlano(){
+  const foods = allFoods();
+  let kcal=0, p=0, c=0, g=0;
+  (state.planoAlimentar||[]).forEach(meal=>{
+    const opt = meal.opcoes && meal.opcoes[0];
+    if(!opt) return;
+    opt.itens.forEach(it=>{
+      const f = foods.find(x=>x.id===it.fid);
+      if(!f) return;
+      const factor = it.g/100;
+      kcal += f.kc*factor; p += f.p*factor; c += f.c*factor; g += f.g*factor;
+    });
+  });
+  return {kcal: Math.round(kcal), p: Math.round(p), c: Math.round(c), g: Math.round(g)};
+}
+
 function calcPerfil(){
   const p = state.perfil;
   const altM = p.altura/100;
   const imc = p.peso / (altM*altM);
-  // Mifflin-St Jeor
+  // Mifflin-St Jeor — só referência (TMB/GET), não define mais a meta do dia
   const tmb = p.sexo==='m'
     ? (10*p.peso + 6.25*p.altura - 5*p.idade + 5)
     : (10*p.peso + 6.25*p.altura - 5*p.idade - 161);
   const get = tmb * p.atividade;
-  const meta = get + Number(p.objetivo);
-  // macros: 2g/kg prot, 1g/kg gord, resto carbo
-  const protG = Math.round(p.peso * 2);
-  const gordG = Math.round(p.peso * 1);
-  const kcalRestante = meta - (protG*4 + gordG*9);
-  const carbG = Math.max(0, Math.round(kcalRestante/4));
+  // meta e macros do dia vêm do plano alimentar real (nutricionista)
+  const plano = metaDoPlano();
+  const meta = plano.kcal || Math.round(get + Number(p.objetivo)); // fallback se o plano estiver vazio
+  const protG = plano.kcal ? plano.p : Math.round(p.peso * 2);
+  const gordG = plano.kcal ? plano.g : Math.round(p.peso * 1);
+  const carbG = plano.kcal ? plano.c : Math.max(0, Math.round((meta - (protG*4 + gordG*9))/4));
   const pesoIdeal = Math.round(22.5 * altM * altM);
-  return {imc, tmb:Math.round(tmb), get:Math.round(get), meta:Math.round(meta), protG, gordG, carbG, pesoIdeal};
+  return {imc, tmb:Math.round(tmb), get:Math.round(get), meta, protG, gordG, carbG, pesoIdeal};
 }
 
 function imcCategoria(imc){
@@ -4165,7 +4184,7 @@ async function gerarRelatorioPDF(){
   const perfilLines = [
     `Peso atual: ${p.peso} kg · Altura: ${p.altura} cm · Idade: ${p.idade} anos · Sexo: ${p.sexo==='m'?'Masculino':'Feminino'}`,
     `IMC: ${r.imc.toFixed(1)} · TMB: ${r.tmb} kcal · GET: ${r.get} kcal`,
-    `Meta diária: ${r.meta} kcal (objetivo: ${p.objetivo>0?'+'+p.objetivo:p.objetivo} kcal)`,
+    `Meta diária: ${r.meta} kcal (baseada no plano alimentar) · GET estimado: ${r.get} kcal`,
     `Macros alvo: ${r.protG}g proteína · ${r.carbG}g carbo · ${r.gordG}g gordura`,
     `Meta hidratação: ${(p.aguaMeta||3000)} ml/dia`,
   ];
