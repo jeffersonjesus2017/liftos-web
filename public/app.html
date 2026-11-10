@@ -779,6 +779,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <input type="text" id="food-search" placeholder="Buscar: arroz, frango, ovo, whey…" autocomplete="off">
         <div class="search-results" id="food-results" hidden></div>
       </div>
+      <div id="food-unidade-wrap" hidden style="margin-top:10px">
+        <label>Ou quantas unidades?</label>
+        <input type="number" id="food-unidades" min="0" step="0.5" placeholder="ex: 2">
+      </div>
       <div class="row two" style="margin-top:10px">
         <div><label>Quantidade (g/ml)</label><input type="number" id="food-qty" value="100" min="1" step="1"></div>
         <div style="display:flex;align-items:flex-end"><button class="primary" id="btn-add-food" style="width:100%">Adicionar</button></div>
@@ -807,6 +811,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
           </div>
           <div class="row two" style="margin-top:8px">
             <div><label>Gord (g)</label><input type="number" id="cf-g" step="0.1"></div>
+            <div><label>Peso de 1 unidade (g) — opcional</label><input type="number" id="cf-un" step="1" placeholder="ex: 50 (se for tipo ovo, fatia...)"></div>
+          </div>
+          <div class="row two" style="margin-top:8px">
+            <div></div>
             <div style="display:flex;align-items:flex-end"><button class="primary" id="btn-add-custom" style="width:100%">Salvar alimento</button></div>
           </div>
         </div>
@@ -1200,16 +1208,16 @@ const FOODS = [
   {id:'carne_co', n:'Coxão mole grelhado (TACO)', kc:186, p:32, c:0, g:5.8},
   {id:'carne_file', n:'Filé mignon grelhado (TACO)', kc:220, p:32, c:0, g:9.4},
   {id:'carne_fr', n:'Fraldinha grelhada (TACO)', kc:239, p:28, c:0, g:13},
-  {id:'ovo_in', n:'Ovo inteiro cozido (TACO)', kc:143, p:13, c:0.6, g:9.5},
-  {id:'ovo_mex', n:'Ovo mexido sem gordura (TACO, 1 ovo ~50g)', kc:143, p:13, c:0.6, g:9.5},
-  {id:'ovo_cl', n:'Clara de ovo (TACO)', kc:52, p:11, c:0.7, g:0.2},
+  {id:'ovo_in', n:'Ovo inteiro cozido (TACO)', kc:143, p:13, c:0.6, g:9.5, un:50},
+  {id:'ovo_mex', n:'Ovo mexido sem gordura (TACO, 1 ovo ~50g)', kc:143, p:13, c:0.6, g:9.5, un:50},
+  {id:'ovo_cl', n:'Clara de ovo (TACO)', kc:52, p:11, c:0.7, g:0.2, un:33},
   {id:'polvilho', n:'Polvilho azedo/doce seco (TACO)', kc:340, p:0.3, c:84, g:0.2},
   {id:'batata_i', n:'Batata inglesa cozida', kc:52, p:1.2, c:12, g:0.1},
   {id:'batata_d', n:'Batata doce cozida', kc:77, p:0.6, c:18, g:0.1},
   {id:'macarrao', n:'Macarrão cozido', kc:111, p:3.9, c:22, g:0.6},
-  {id:'pao_fr', n:'Pão francês', kc:300, p:8, c:58, g:3.1},
-  {id:'pao_in', n:'Pão integral', kc:253, p:9, c:48, g:3.5},
-  {id:'pao_fat', n:'Pão de forma Pullman tradicional (fatia ~25g, rótulo)', kc:257, p:8, c:50, g:2.5},
+  {id:'pao_fr', n:'Pão francês', kc:300, p:8, c:58, g:3.1, un:50},
+  {id:'pao_in', n:'Pão integral', kc:253, p:9, c:48, g:3.5, un:25},
+  {id:'pao_fat', n:'Pão de forma Pullman tradicional (fatia ~25g, rótulo)', kc:257, p:8, c:50, g:2.5, un:25},
   {id:'prot_soja', n:'Proteína de soja (PTS/TVP)', kc:338, p:51, c:30, g:1.2},
   {id:'farinha_a', n:'Farinha de arroz', kc:366, p:5.9, c:80, g:1.4},
   {id:'granola', n:'Granola', kc:471, p:10, c:65, g:19},
@@ -1230,10 +1238,10 @@ const FOODS = [
   {id:'mel', n:'Mel', kc:304, p:0.3, c:82, g:0},
   {id:'queijo_m', n:'Queijo minas frescal', kc:264, p:17, c:3, g:21},
   {id:'queijo_mu', n:'Queijo muçarela', kc:280, p:22, c:3, g:20},
-  {id:'whey', n:'Whey protein (1 scoop ~30g)', kc:380, p:76, c:7, g:5},
-  {id:'banana', n:'Banana', kc:92, p:1.3, c:24, g:0.1},
-  {id:'maca', n:'Maçã', kc:52, p:0.3, c:14, g:0.2},
-  {id:'laranja', n:'Laranja', kc:46, p:1, c:11, g:0.1},
+  {id:'whey', n:'Whey protein (1 scoop ~30g)', kc:380, p:76, c:7, g:5, un:30},
+  {id:'banana', n:'Banana', kc:92, p:1.3, c:24, g:0.1, un:100},
+  {id:'maca', n:'Maçã', kc:52, p:0.3, c:14, g:0.2, un:130},
+  {id:'laranja', n:'Laranja', kc:46, p:1, c:11, g:0.1, un:180},
   {id:'mamao', n:'Mamão formosa (TACO)', kc:45, p:0.8, c:11, g:0.1},
   {id:'abacate', n:'Abacate', kc:160, p:2, c:9, g:15},
   {id:'brocolis', n:'Brócolis cozido (TACO)', kc:25, p:2.1, c:4, g:0.3},
@@ -3595,13 +3603,31 @@ searchInput.addEventListener('input', ()=>{
       selectedFood = allFoods().find(f=>f.id===b.dataset.fid);
       searchInput.value = selectedFood.n;
       resultsBox.hidden = true;
-      document.getElementById('food-selected').textContent =
-        `Por 100g: ${selectedFood.kc} kcal · ${selectedFood.p}g P · ${selectedFood.c}g C · ${selectedFood.g}g G`;
+      const unidadeWrap = document.getElementById('food-unidade-wrap');
+      const unidadesInput = document.getElementById('food-unidades');
+      let info = `Por 100g: ${selectedFood.kc} kcal · ${selectedFood.p}g P · ${selectedFood.c}g C · ${selectedFood.g}g G`;
+      if(selectedFood.un){
+        info += ` · 1 unidade ≈ ${selectedFood.un}g`;
+        unidadeWrap.hidden = false;
+        unidadesInput.value = '';
+      } else {
+        unidadeWrap.hidden = true;
+      }
+      document.getElementById('food-selected').textContent = info;
     });
   });
 });
 document.addEventListener('click', e=>{
   if(!e.target.closest('.search-wrap')) resultsBox.hidden = true;
+});
+
+// quando a pessoa digita "quantas unidades" (ex: 2 ovos), converte pra gramas
+// automaticamente no campo de quantidade — evita ter que pesar e calcular na mão.
+document.getElementById('food-unidades').addEventListener('input', e=>{
+  if(!selectedFood || !selectedFood.un) return;
+  const unidades = Number(e.target.value);
+  if(!unidades || unidades<=0) return;
+  document.getElementById('food-qty').value = Math.round(unidades * selectedFood.un);
 });
 
 document.getElementById('btn-add-food').addEventListener('click', ()=>{
@@ -3623,6 +3649,8 @@ document.getElementById('btn-add-food').addEventListener('click', ()=>{
   searchInput.value = '';
   document.getElementById('food-selected').textContent = '';
   document.getElementById('food-qty').value = 100;
+  document.getElementById('food-unidade-wrap').hidden = true;
+  document.getElementById('food-unidades').value = '';
   renderDieta();
   toast('Adicionado ✓');
 });
@@ -3634,15 +3662,18 @@ document.getElementById('btn-add-custom').addEventListener('click', ()=>{
   const p = Number(document.getElementById('cf-p').value)||0;
   const c = Number(document.getElementById('cf-c').value)||0;
   const g = Number(document.getElementById('cf-g').value)||0;
+  const un = Number(document.getElementById('cf-un').value)||0;
   if(!nome || !kcal){ toast('Nome e kcal são obrigatórios'); return; }
   // normalizar para 100g
   const f = porcao/100;
-  state.alimentosCustom.push({
+  const novo = {
     id:'u'+Date.now(), n:nome,
     kc: Math.round(kcal/f), p:+(p/f).toFixed(1), c:+(c/f).toFixed(1), g:+(g/f).toFixed(1)
-  });
+  };
+  if(un>0) novo.un = un; // peso de 1 unidade (g) — permite lançar "2 unidades" em vez de pesar
+  state.alimentosCustom.push(novo);
   saveState();
-  ['cf-nome','cf-kcal','cf-p','cf-c','cf-g'].forEach(id=>document.getElementById(id).value='');
+  ['cf-nome','cf-kcal','cf-p','cf-c','cf-g','cf-un'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cf-porcao').value = 100;
   toast('Alimento salvo ✓');
 });
