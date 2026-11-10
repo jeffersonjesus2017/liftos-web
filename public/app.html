@@ -981,6 +981,14 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 const LS_KEY = 'cargabruta.v1';
 
+// conta original (Jefferson) — algumas migrações legadas só fazem sentido pra essa conta
+// (dados pessoais dele que viviam hardcoded no app antes de existir login multiusuário).
+// Contas novas (ex: esposa) não devem herdar treino/dieta/avaliações dele.
+const OWNER_EMAIL = 'jeffersonjesus257@gmail.com';
+function ehDonoOriginal(){
+  return !!(usuarioAtual && usuarioAtual.email && usuarioAtual.email.toLowerCase() === OWNER_EMAIL);
+}
+
 const defaultState = {
   updatedAt: 0, // epoch ms da última alteração local — usado pra decidir local x nuvem ao retomar o app
   perfil: {
@@ -1152,6 +1160,27 @@ const defaultState = {
   ],
 };
 
+// Estado inicial neutro — usado pra QUALQUER conta nova que não seja a do Jefferson
+// (ver OWNER_EMAIL). Sem treino, sem dieta, sem avaliações — a pessoa monta do zero.
+const emptyState = {
+  updatedAt: 0,
+  perfil: {
+    peso: 0, altura: 0, idade: 0, sexo: 'f',
+    atividade: 1.55, objetivo: 0,
+    aguaMeta: 2000
+  },
+  agua: {},
+  ultimoBackup: null,
+  divisaoAtiva: null,
+  divisoes: {},
+  planoAlimentar: [],
+  historico: [],
+  refeicoes: {},
+  alimentosCustom: [],
+  sessaoAtiva: null,
+  avaliacoes: [],
+};
+
 // Base de alimentos (valores por 100g, referência TACO/USDA aproximada)
 const FOODS = [
   {id:'arroz_c', n:'Arroz branco cozido (TACO)', kc:128, p:2.5, c:28, g:0.2},
@@ -1237,14 +1266,19 @@ const FOODS = [
 // --------- state helpers ----------
 // aplica todas as migrações de versão sobre um state bruto (de localStorage OU do Supabase)
 function aplicarMigracoes(parsed){
-    const merged = {...structuredClone(defaultState), ...parsed};
+    // conta nova (ex: esposa) usa a base neutra — só a conta do Jefferson usa defaultState
+    // (que carrega o treino/dieta/avaliações pessoais dele, legado de antes do login multiusuário)
+    const souDono = ehDonoOriginal();
+    const base = souDono ? defaultState : emptyState;
+    const merged = {...structuredClone(base), ...parsed};
     // migração: garantir que TREINOJEFFERSON existe e é padrão em instalações antigas
-    if(!merged.divisoes['TREINOJEFFERSON']){
+    // (só se aplica à conta original — outras contas não devem herdar o treino dele)
+    if(souDono && !merged.divisoes['TREINOJEFFERSON']){
       merged.divisoes['TREINOJEFFERSON'] = structuredClone(defaultState.divisoes['TREINOJEFFERSON']);
       merged.divisaoAtiva = 'TREINOJEFFERSON';
     }
-    // migração: plano alimentar (adicionado na v3)
-    if(!merged.planoAlimentar || !merged.planoAlimentar.length){
+    // migração: plano alimentar (adicionado na v3) — idem, só pra conta original
+    if(souDono && (!merged.planoAlimentar || !merged.planoAlimentar.length)){
       merged.planoAlimentar = structuredClone(defaultState.planoAlimentar);
     }
     // migração v5/v6: R1 e R2 — ajustes de preparo real (ovo mexido + polvilho em vez de tapioca pronta ou crepioca)
@@ -1304,14 +1338,15 @@ function aplicarMigracoes(parsed){
     // migração: avaliações corporais (adicionado na v4)
     if(!Array.isArray(merged.avaliacoes)) merged.avaliacoes = [];
     // migração v12: 3 avaliações históricas (jul-out 2026) importadas do app anterior
-    // só injeta se estiver vazio pra não sobrescrever avaliações manuais
-    if(merged.avaliacoes.length === 0){
+    // só injeta se estiver vazio pra não sobrescrever avaliações manuais — e só na conta
+    // original, pra não dar o histórico corporal dele de "seed" pra outra conta vazia.
+    if(souDono && merged.avaliacoes.length === 0){
       merged.avaliacoes = structuredClone(defaultState.avaliacoes);
     }
     // migração v13: avaliações passam a ter dobras cutâneas (adipometria).
     // Se as avaliações seed (datas 2026-07-18, 2026-09-19, 2026-10-18) estão lá mas SEM d_soma,
     // substitui pelo seed completo (que agora inclui 23/08 e dobras).
-    const temSeedAntigo = merged.avaliacoes.find(a=>a.data==='2026-07-18' && !a.d_soma);
+    const temSeedAntigo = souDono && merged.avaliacoes.find(a=>a.data==='2026-07-18' && !a.d_soma);
     if(temSeedAntigo){
       // mantém qualquer avaliação manual criada pelo usuário (que não bate com as 4 datas seed)
       const datasSeed = ['2026-07-18','2026-08-23','2026-09-19','2026-10-18','2026-11-03'];
@@ -1326,7 +1361,7 @@ function aplicarMigracoes(parsed){
       aval1118.c_peito = ''; aval1118.c_cintura = ''; aval1118.c_quadril = '';
       aval1118.obs = '';
     }
-    if(!avalNov){
+    if(souDono && !avalNov){
       const seedNov = structuredClone(defaultState.avaliacoes.find(a=>a.data==='2026-11-03'));
       if(seedNov) merged.avaliacoes.push(seedNov);
     }
@@ -1376,11 +1411,11 @@ function aplicarMigracoes(parsed){
     // migração v24: adiciona avaliações de fev/mar (cutting anterior) + marca campo 'fase' nas existentes
     const temFev = merged.avaliacoes.find(a=>a.data==='2026-02-16');
     const temMar = merged.avaliacoes.find(a=>a.data==='2026-03-16');
-    if(!temFev){
+    if(souDono && !temFev){
       const seedFev = structuredClone(defaultState.avaliacoes.find(a=>a.data==='2026-02-16'));
       if(seedFev) merged.avaliacoes.push(seedFev);
     }
-    if(!temMar){
+    if(souDono && !temMar){
       const seedMar = structuredClone(defaultState.avaliacoes.find(a=>a.data==='2026-03-16'));
       if(seedMar) merged.avaliacoes.push(seedMar);
     }
@@ -1521,8 +1556,10 @@ async function onAuthed(user){
       state = cloud;
       logDebug('onAuthed: usou NUVEM (sem cache local)');
     } else {
-      // primeiro login nessa conta: migra dados locais (se existirem nesse aparelho) pra nuvem
-      state = local || structuredClone(defaultState);
+      // primeiro login nessa conta: migra dados locais (se existirem nesse aparelho) pra nuvem.
+      // Se não é a conta original do Jefferson, começa com estado neutro (sem treino/dieta/
+      // avaliações dele) em vez do defaultState — cada conta começa do zero.
+      state = local || structuredClone(ehDonoOriginal() ? defaultState : emptyState);
       logDebug('onAuthed: primeiro login — migrou local (ou default) pra nuvem');
       await sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' });
     }
@@ -1530,7 +1567,7 @@ async function onAuthed(user){
     setSyncStatus('Sincronizado ✓');
   }catch(e){
     console.error('[onAuthed]', e);
-    state = loadState() || structuredClone(defaultState);
+    state = loadState() || structuredClone(ehDonoOriginal() ? defaultState : emptyState);
     setSyncStatus('Offline — usando dados salvos neste aparelho');
   }
   esconderAuthGate();
