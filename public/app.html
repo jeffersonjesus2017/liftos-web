@@ -580,9 +580,8 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <div id="divisao-chips"></div>
       </div>
       <hr class="sep">
-      <div id="treino-feito-aviso" style="font-size:11px;color:var(--ok);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px" hidden></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <label style="margin:0;flex:1;min-width:140px" id="treino-select-label">Treino sugerido
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="margin:0" id="treino-select-label">Treino sugerido
           <select id="treino-select"></select>
         </label>
         <button class="primary" id="btn-iniciar">Iniciar sessão</button>
@@ -2355,23 +2354,26 @@ function renderHoje(){
   set('c-g','c-m','c-fill',t.c,r.carbG);
   set('g-g','g-m','g-fill',t.g,r.gordG);
 
-  // treino de hoje — se já concluiu hoje mostra 'Próximo treino', senão mostra 'Treino de hoje' (próximo pendente)
+  // treino de hoje — mostra só o treino do dia; sem opção de adiantar o próximo
+  // (próximo treino + adiantar fica só na aba Treino)
   const div = state.divisoes[state.divisaoAtiva];
   const el = document.getElementById('treino-hoje');
   if(!div){ el.innerHTML = '<div class="empty">Nenhuma divisão ativa</div>'; return; }
   const info = proximoTreinoInfo();
   if(!info || !info.treino){ el.innerHTML = '<div class="empty">Sem treinos configurados</div>'; return; }
-  const titulo = info.jaConcluiuHoje ? 'Próximo treino' : 'Treino de hoje';
-  const feitoHojeHtml = info.jaConcluiuHoje
-    ? `<div style="font-size:11px;color:var(--ok);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:4px">✓ ${info.ultimoFeitoNome} concluído hoje</div>`
-    : '';
-  el.innerHTML = `
-    ${feitoHojeHtml}
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-mute);font-weight:700;margin-bottom:4px">${titulo}</div>
-    <div style="font-weight:600;font-size:16px;margin-bottom:4px">${info.treino.nome}</div>
-    <div style="font-size:12px;color:var(--ink-mute);margin-bottom:10px">${info.treino.exercicios.length} exercícios · ${info.treino.exercicios.reduce((s,e)=>s+e.series,0)} séries totais</div>
-    <button class="primary" onclick="iniciarSessaoDireta('${info.treino.id}')">${info.jaConcluiuHoje?'Adiantar próximo':'Começar agora'}</button>
-  `;
+  if(info.jaConcluiuHoje){
+    el.innerHTML = `
+      <div style="font-size:11px;color:var(--ok);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:4px">✓ ${info.ultimoFeitoNome} concluído hoje</div>
+      <div style="font-size:12px;color:var(--ink-mute)">Treino de hoje já concluído. Bom descanso!</div>
+    `;
+  } else {
+    el.innerHTML = `
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-mute);font-weight:700;margin-bottom:4px">Treino de hoje</div>
+      <div style="font-weight:600;font-size:16px;margin-bottom:4px">${info.treino.nome}</div>
+      <div style="font-size:12px;color:var(--ink-mute);margin-bottom:10px">${info.treino.exercicios.length} exercícios · ${info.treino.exercicios.reduce((s,e)=>s+e.series,0)} séries totais</div>
+      <button class="primary" onclick="iniciarSessaoDireta('${info.treino.id}')">Começar agora</button>
+    `;
+  }
 }
 
 // Retorna {treino, jaConcluiuHoje, ultimoFeitoNome}
@@ -2426,17 +2428,13 @@ function renderTreino(){
   sel.innerHTML = div.treinos.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
   const info = proximoTreinoInfo();
   if(info && info.treino) sel.value = info.treino.id;
-  // label dinâmico + aviso de treino concluído hoje
+  // label dinâmico (sem aviso de concluído hoje — essa info fica só na aba Hoje)
   const labelEl = document.getElementById('treino-select-label');
-  const avisoEl = document.getElementById('treino-feito-aviso');
   const btnIniciar = document.getElementById('btn-iniciar');
   if(info && info.jaConcluiuHoje){
-    avisoEl.hidden = false;
-    avisoEl.textContent = `✓ ${info.ultimoFeitoNome} concluído hoje`;
     labelEl.firstChild.textContent = 'Próximo treino';
     btnIniciar.textContent = 'Adiantar próximo';
   } else {
-    avisoEl.hidden = true;
     labelEl.firstChild.textContent = 'Treino de hoje';
     btnIniciar.textContent = 'Iniciar sessão';
   }
