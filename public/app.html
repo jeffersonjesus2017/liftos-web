@@ -343,6 +343,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 /* Personalizar refeição */
 .custom-meal{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow-y:auto;padding:4px;margin-top:10px}
 .custom-item{display:grid;grid-template-columns:1fr 70px 24px;gap:6px;align-items:center;padding:6px;background:var(--surface-2);border-radius:6px;font-size:12px}
+.custom-item .info{min-width:0;overflow:hidden}
 .custom-item .nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .custom-item input[type="number"]{padding:5px 6px;font-size:12px;text-align:center}
 .custom-item .rm{appearance:none;background:transparent;border:0;color:var(--crit);font-size:16px;cursor:pointer;padding:0}
@@ -861,16 +862,6 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
           <span id="agua-sugestao"></span>
         </div>
       </div>
-      <div class="row two" style="margin-top:10px">
-        <div><label>Tema do app</label>
-          <select id="p-tema">
-            <option value="system">Automático (segue o sistema)</option>
-            <option value="dark">Sempre escuro</option>
-            <option value="light">Sempre claro</option>
-          </select>
-        </div>
-        <div></div>
-      </div>
       <div style="margin-top:14px;display:flex;gap:8px">
         <button class="primary" id="btn-salvar-perfil">Salvar perfil</button>
       </div>
@@ -905,8 +896,9 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     <div class="card">
       <h3>Dados</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="secondary" id="btn-export">Exportar dados</button>
-        <button class="secondary" id="btn-import">Importar</button>
+        <button class="secondary" id="btn-export">Exportar dados (.json)</button>
+        <button class="secondary" id="btn-import">Importar (.json)</button>
+        <input type="file" id="import-file-input" accept=".json,application/json" hidden>
         <button class="secondary" id="btn-pdf">📄 Relatório PDF</button>
       </div>
       <details style="margin-top:14px">
@@ -1038,7 +1030,7 @@ const defaultState = {
           {id:'j20', nome:'Cadeira flexora', series:3, reps:'12', obs:'2s pico de contração'},
           {id:'j21', nome:'Abdominal', series:3, reps:'15-20', obs:''},
         ]},
-        {id:'SEX', nome:'SEXTA: OMBRO/TRÍCEPS', exercicios:[
+        {id:'SAB', nome:'SÁBADO: OMBRO/TRÍCEPS', exercicios:[
           {id:'j22', nome:'Desenvolvimento máquina', series:3, reps:'10-12', obs:''},
           {id:'j23', nome:'Elevação lateral no cross over', series:3, reps:'12', obs:''},
           {id:'j24', nome:'Elevação frontal unilateral no cross over', series:3, reps:'12', obs:''},
@@ -1046,7 +1038,7 @@ const defaultState = {
           {id:'j26', nome:'Elevação lateral máquina', series:3, reps:'10', obs:'+ 1 cluster set (5/5/5)'},
           {id:'j27', nome:'Tríceps francês unilateral com corda', series:3, reps:'10-12', obs:''},
         ]},
-        {id:'SAB', nome:'SÁBADO: POSTERIOR/GLÚTEO/QUADRÍCEPS', exercicios:[
+        {id:'DOM', nome:'DOMINGO: POSTERIOR/GLÚTEO/QUADRÍCEPS', exercicios:[
           {id:'j28', nome:'Cadeira abdutora', series:3, reps:'10-12', obs:'2s pico de contração'},
           {id:'j29', nome:'Elevação pélvica', series:3, reps:'12', obs:''},
           {id:'j30', nome:'Agachamento hack', series:3, reps:'10-12', obs:''},
@@ -3710,6 +3702,7 @@ function renderProgress(){
 // --------- personalizar refeição ----------
 let _customItens = []; // [{fid, grams}]
 let _customMealId = null;
+let _customSelectedFood = null; // alimento selecionado na busca, aguardando quantidade/unidades antes de adicionar
 
 function abrirPersonalizar(mealId){
   const meal = state.planoAlimentar.find(m=>m.id===mealId);
@@ -3719,6 +3712,7 @@ function abrirPersonalizar(mealId){
   const sel = state._selectedOpt?.[mealId] ?? 0;
   const opt = meal.opcoes[sel];
   _customItens = opt.itens.map(it=>({fid:it.fid, grams:it.g}));
+  _customSelectedFood = null;
   // Configurar o modal ANTES de renderizar o conteúdo (pra não sobrescrever)
   document.getElementById('modal-title').textContent = `Personalizar ${meal.nome}`;
   document.getElementById('modal-msg').className = 'msg';
@@ -3731,7 +3725,7 @@ function abrirPersonalizar(mealId){
   _modalResolve = (resultado)=>{
     _modalResolve = null;
     if(resultado === true) salvarPersonalizado();
-    else { _customItens = []; _customMealId = null; }
+    else { _customItens = []; _customMealId = null; _customSelectedFood = null; }
   };
 }
 
@@ -3748,7 +3742,7 @@ function renderCustomModal(){
     tot.kc += ikc; tot.p += f.p*fac; tot.c += f.c*fac; tot.g += f.g*fac;
     return `
       <div class="custom-item">
-        <div>
+        <div class="info">
           <div class="nome">${f.n}</div>
           <div class="kc">${Math.round(ikc)} kcal</div>
         </div>
@@ -3761,15 +3755,26 @@ function renderCustomModal(){
     <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">Edite as gramas, remova ou adicione itens:</div>
     <div class="custom-meal">${itensHtml}</div>
     <div class="custom-add">
-      <input type="text" id="custom-busca" placeholder="buscar alimento..." autocomplete="off">
+      <input type="text" id="custom-busca" placeholder="buscar alimento..." autocomplete="off" value="${_customSelectedFood ? _customSelectedFood.n : ''}">
       <input type="number" id="custom-qty" value="100" min="1" step="1" placeholder="g">
+      <button type="button" id="custom-btn-add" class="rm" style="color:var(--good, #3a8f5a);font-size:20px" title="Adicionar">+</button>
       <div class="custom-results" id="custom-results" hidden></div>
     </div>
+    <div id="custom-unidade-wrap" hidden style="margin-top:6px;gap:6px;align-items:center">
+      <label style="font-size:11px;color:var(--ink-mute)">Ou quantas unidades?</label>
+      <input type="number" id="custom-unidades" min="0" step="0.5" placeholder="ex: 2" style="width:70px;font-size:12px;padding:5px 6px;text-align:center">
+    </div>
+    <div id="custom-selected-info" style="font-size:11px;color:var(--ink-mute);margin-top:4px">${_customSelectedFood ? `Por 100g: ${_customSelectedFood.kc} kcal · ${_customSelectedFood.p}g P · ${_customSelectedFood.c}g C · ${_customSelectedFood.g}g G${_customSelectedFood.un ? ` · 1 unidade ≈ ${_customSelectedFood.un}g` : ''}` : ''}</div>
     <div class="custom-total">
       <span>TOTAL</span>
       <span>${Math.round(tot.kc)} kcal · ${Math.round(tot.p)}P ${Math.round(tot.c)}C ${Math.round(tot.g)}G</span>
     </div>
   `;
+  if(_customSelectedFood && _customSelectedFood.un){
+    const unWrap = document.getElementById('custom-unidade-wrap');
+    unWrap.hidden = false;
+    unWrap.style.display = 'flex';
+  }
   // bindings
   container.querySelectorAll('[data-custom-i]').forEach(inp=>{
     inp.addEventListener('change', e=>{
@@ -3787,6 +3792,7 @@ function renderCustomModal(){
   const busca = document.getElementById('custom-busca');
   const results = document.getElementById('custom-results');
   busca.addEventListener('input', ()=>{
+    _customSelectedFood = null; // digitar de novo invalida a seleção anterior
     const q = busca.value.trim().toLowerCase();
     if(q.length < 2){ results.hidden = true; return; }
     const matches = allFoods().filter(f=>f.n.toLowerCase().includes(q)).slice(0,6);
@@ -3795,14 +3801,33 @@ function renderCustomModal(){
     results.hidden = false;
     results.querySelectorAll('button').forEach(b=>{
       b.addEventListener('click', ()=>{
-        const qty = Number(document.getElementById('custom-qty').value) || 100;
-        _customItens.push({fid: b.dataset.fid, grams: qty});
-        busca.value = '';
+        _customSelectedFood = allFoods().find(f=>f.id===b.dataset.fid);
         results.hidden = true;
         renderCustomModal();
       });
     });
   });
+  // mesma lógica do "adicionar alimento avulso": se o alimento tem peso por unidade
+  // (ovo, pão, etc.), digitar "2" preenche as gramas sozinho
+  const unidadesInput = document.getElementById('custom-unidades');
+  if(unidadesInput){
+    unidadesInput.addEventListener('input', e=>{
+      if(!_customSelectedFood || !_customSelectedFood.un) return;
+      const unidades = Number(e.target.value);
+      if(!unidades || unidades<=0) return;
+      document.getElementById('custom-qty').value = Math.round(unidades * _customSelectedFood.un);
+    });
+  }
+  const btnAdd = document.getElementById('custom-btn-add');
+  if(btnAdd){
+    btnAdd.addEventListener('click', ()=>{
+      if(!_customSelectedFood){ toast('Busque e selecione um alimento primeiro'); return; }
+      const qty = Number(document.getElementById('custom-qty').value) || 100;
+      _customItens.push({fid: _customSelectedFood.id, grams: qty});
+      _customSelectedFood = null;
+      renderCustomModal();
+    });
+  }
 }
 
 function salvarPersonalizado(){
@@ -4069,13 +4094,6 @@ function renderPerfil(){
   document.getElementById('p-ativ').value = p.atividade;
   document.getElementById('p-obj').value = p.objetivo;
   document.getElementById('p-agua').value = p.aguaMeta || 3000;
-  document.getElementById('p-tema').value = p.tema || 'system';
-  // aplicação imediata ao mudar o select (sem precisar salvar)
-  document.getElementById('p-tema').onchange = (e)=>{
-    state.perfil.tema = e.target.value;
-    saveState();
-    aplicarTema();
-  };
   // sugestão de água baseada no peso: 25-50 ml/kg
   const min = Math.round(p.peso * 25 / 50) * 50;
   const max = Math.round(p.peso * 50 / 50) * 50;
@@ -4110,7 +4128,7 @@ document.getElementById('btn-salvar-perfil').addEventListener('click', ()=>{
     atividade: Number(document.getElementById('p-ativ').value),
     objetivo: Number(document.getElementById('p-obj').value),
     aguaMeta: Number(document.getElementById('p-agua').value) || 3000,
-    tema: document.getElementById('p-tema').value || 'system'
+    tema: state.perfil.tema || 'system' // controlado pelo botão de tema rápido no topo, não aqui
   };
   saveState();
   aplicarTema();
@@ -4142,59 +4160,28 @@ document.getElementById('btn-tema-quick').addEventListener('click', ()=>{
   state.perfil.tema = atual === 'dark' ? 'light' : 'dark';
   saveState();
   aplicarTema();
-  // se a aba Perfil tá aberta, atualiza o select também
-  const sel = document.getElementById('p-tema');
-  if(sel) sel.value = state.perfil.tema;
   toast(state.perfil.tema === 'dark' ? '🌙 Tema escuro' : '☀ Tema claro');
 });
 
-document.getElementById('btn-export').addEventListener('click', async ()=>{
+document.getElementById('btn-export').addEventListener('click', ()=>{
+  // baixa o backup como arquivo .json de verdade (mais confiável que Web Share/clipboard,
+  // que dependiam de APIs nem sempre disponíveis no navegador/dispositivo)
   const data = JSON.stringify(state, null, 2);
   const nomeArquivo = `liftos-backup-${todayKey()}.json`;
-
-  // tenta Web Share API com arquivo (Android moderno)
-  const temShareApi = typeof navigator !== 'undefined' && navigator.share;
-  let shareFileOk = false;
-  if(temShareApi){
-    try {
-      const file = new File([data], nomeArquivo, {type:'application/json'});
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:'LIFT Backup', text:'Backup dos dados do LIFT'});
-        shareFileOk = true;
-        toast('Compartilhado ✓');
-      } else {
-        // fallback: compartilhar como texto
-        await navigator.share({title:'LIFT Backup', text:data});
-        shareFileOk = true;
-        toast('Compartilhado ✓');
-      }
-    } catch(e){
-      // se usuário cancelou ou API falhou, cai no fallback
-      if(e.name === 'AbortError'){
-        // usuário cancelou — não faz mais nada
-        return;
-      }
-      shareFileOk = false;
-    }
-  }
-
-  if(!shareFileOk){
-    // fallback: tenta clipboard, senão modal
-    let copiado = false;
-    try {
-      await navigator.clipboard.writeText(data);
-      copiado = true;
-    } catch(e){}
-    if(copiado){
-      toast('Copiado pro clipboard ✓ (cole em Notes/Drive)');
-    } else {
-      await prompt2('Compartilhar não funcionou. Copie manualmente:', data, {title:'Dados exportados', multiline:true});
-    }
-  }
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 
   // marca backup feito
   state.ultimoBackup = new Date().toISOString();
   saveState();
+  toast('Arquivo baixado ✓');
 });
 
 // --------- gerador de PDF mensal ----------
@@ -4474,16 +4461,28 @@ document.getElementById('btn-pdf').addEventListener('click', async ()=>{
   catch(e){ toast('Erro: '+e.message); console.error(e); }
 });
 
-document.getElementById('btn-import').addEventListener('click', async ()=>{
-  const t = await prompt2('Cole o JSON exportado:', '', {title:'Importar dados', multiline:true});
-  if(!t) return;
+document.getElementById('btn-import').addEventListener('click', ()=>{
+  document.getElementById('import-file-input').click();
+});
+document.getElementById('import-file-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = ''; // permite escolher o mesmo arquivo de novo numa próxima vez
+  if(!file) return;
+  const ok = await confirmar(
+    `Importar "${file.name}" vai SUBSTITUIR todos os dados atuais (treino, dieta, histórico, avaliações). Essa ação não pode ser desfeita. Continuar?`,
+    {title:'Importar backup', okLabel:'Importar e substituir', warn:true}
+  );
+  if(!ok) return;
   try{
-    const parsed = JSON.parse(t);
-    state = {...structuredClone(defaultState), ...parsed};
+    const texto = await file.text();
+    const parsed = JSON.parse(texto);
+    // base neutra pra quem não é a conta original — nunca herda dados do Jefferson
+    const base = ehDonoOriginal() ? defaultState : emptyState;
+    state = {...structuredClone(base), ...parsed};
     saveState();
     toast('Dados importados ✓');
-    renderPerfil();
-  }catch(e){ toast('JSON inválido'); }
+    showView('hoje');
+  }catch(e){ toast('Arquivo inválido — confira se é um backup .json do LIFT'); }
 });
 
 document.getElementById('btn-reset').addEventListener('click', async ()=>{
@@ -4493,7 +4492,7 @@ document.getElementById('btn-reset').addEventListener('click', async ()=>{
     warn:true
   });
   if(!ok) return;
-  state = structuredClone(defaultState);
+  state = structuredClone(ehDonoOriginal() ? defaultState : emptyState);
   saveState();
   toast('Resetado');
   renderPerfil();
