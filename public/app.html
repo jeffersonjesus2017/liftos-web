@@ -427,6 +427,12 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 50%,transparent)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 0%,transparent)}}
 
 .agua-btn{flex:1;min-width:0;font-size:12px;padding:8px 10px}
+.agua-progress{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;margin-bottom:8px}
+.agua-progress .fill{height:100%;background:#4a90e2;transition:width .3s}
+.agua-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.agua-custom{display:flex;gap:8px;margin-top:10px}
+.agua-custom input{flex:1;min-width:0}
+.agua-custom button{flex-shrink:0}
 
 /* Progress bar */
 .progress-bar{display:flex;gap:6px;margin:12px 0 16px;align-items:center}
@@ -537,16 +543,23 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     </div>
 
     <div class="card">
-      <h3>Hidratação</h3>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+        <h3 style="margin:0">Hidratação</h3>
         <span class="meal-stats" id="agua-stats">0 / 3000 ml</span>
-        <span class="meal-stats" id="agua-proxima"></span>
       </div>
+      <div class="agua-progress"><div class="fill" id="agua-progress-fill" style="width:0%"></div></div>
+      <div class="meal-stats" id="agua-proxima" style="display:block;margin-bottom:12px"></div>
       <div class="water-plan" id="water-plan"></div>
-      <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+      <div class="agua-actions">
         <button class="secondary agua-btn" data-ml="200">+200ml</button>
         <button class="secondary agua-btn" data-ml="250">+250ml (copo)</button>
         <button class="secondary agua-btn" data-ml="500">+500ml (garrafa)</button>
+      </div>
+      <div class="agua-custom">
+        <input type="number" id="agua-custom-ml" placeholder="Outra quantidade (ml)" min="1" step="50" inputmode="numeric">
+        <button class="primary" id="btn-agua-custom">Adicionar</button>
+      </div>
+      <div style="text-align:right;margin-top:10px">
         <button class="ghost" id="btn-agua-undo">desfazer último</button>
       </div>
     </div>
@@ -1991,6 +2004,8 @@ function renderAgua(){
   const atual = totalAguaHoje();
   const pct = Math.min(100, Math.round(atual/meta*100));
   stats.textContent = `${atual} / ${meta} ml · ${pct}%`;
+  const progressFill = document.getElementById('agua-progress-fill');
+  if(progressFill) progressFill.style.width = pct + '%';
 
   const plano = planoHidratacao();
   const now = new Date();
@@ -2068,6 +2083,21 @@ function addAgua(ml){
 document.querySelectorAll('.agua-btn').forEach(b=>{
   b.addEventListener('click', ()=>addAgua(+b.dataset.ml));
 });
+(()=>{
+  const input = document.getElementById('agua-custom-ml');
+  const btn = document.getElementById('btn-agua-custom');
+  if(!input || !btn) return;
+  const addCustom = ()=>{
+    const ml = Number(input.value);
+    if(!ml || ml<=0){ toast('Digite uma quantidade válida'); return; }
+    addAgua(Math.round(ml));
+    input.value = '';
+  };
+  btn.addEventListener('click', addCustom);
+  input.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); addCustom(); }
+  });
+})();
 document.getElementById('btn-agua-undo').addEventListener('click', ()=>{
   const k = todayKey();
   const list = state.agua[k] || [];
