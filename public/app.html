@@ -3765,7 +3765,13 @@ function renderFotoResultado(){
         </div>
       </div>
     `).join('')}
-    <button class="primary" id="btn-foto-add-tudo" style="width:100%;margin-top:4px">Adicionar ${_fotoItens.length} ${_fotoItens.length===1?'item':'itens'} ao diário de hoje</button>
+    <button class="primary" id="btn-foto-add-tudo" style="width:100%;margin-top:4px">${(()=>{
+      const c = countRefHoje();
+      const prox = state.planoAlimentar.find(m=>!c[m.id]);
+      return prox
+        ? `Adicionar como ${prox.nome} 📷`
+        : `Adicionar ${_fotoItens.length} ${_fotoItens.length===1?'item':'itens'} ao diário`;
+    })()}</button>
   `;
   wrap.querySelectorAll('[data-foto-field]').forEach(inp=>{
     inp.addEventListener('input', e=>{
@@ -3786,19 +3792,48 @@ function renderFotoResultado(){
     btnAddTudo.addEventListener('click', ()=>{
       const k = todayKey();
       state.refeicoes[k] = state.refeicoes[k]||[];
-      _fotoItens.forEach(it=>{
-        state.refeicoes[k].push({
-          foodId: null,
-          nome: it.nome || 'Alimento (foto)',
-          grams: it.quantidade_g,
-          kcal: it.kcal, p: it.proteina_g, c: it.carboidrato_g, g: it.gordura_g,
-          hora: new Date().toISOString(),
-          origem: 'foto'
+      const horaAgora = new Date().toISOString();
+
+      // Descobre a próxima refeição em aberto (que ainda não foi registrada hoje)
+      const counts = countRefHoje();
+      const proxMeal = state.planoAlimentar.find(m => !counts[m.id]);
+
+      if(proxMeal){
+        // Adiciona vinculado à refeição como "Personalizada (foto)"
+        const existentes = state.refeicoes[k].filter(r=>r.refId===proxMeal.id);
+        const grupo = existentes.length>0 ? Math.max(...existentes.map(r=>r._mealGroup||1)) + 1 : 1;
+        _fotoItens.forEach(it=>{
+          state.refeicoes[k].push({
+            foodId: null,
+            nome: it.nome || 'Alimento (foto)',
+            grams: it.quantidade_g,
+            kcal: it.kcal, p: it.proteina_g, c: it.carboidrato_g, g: it.gordura_g,
+            hora: horaAgora,
+            ref: proxMeal.nome,
+            refId: proxMeal.id,
+            _mealGroup: grupo,
+            opcaoNome: 'Foto 📷',
+            origem: 'foto'
+          });
         });
-      });
+        toast(`${proxMeal.nome} registrada via foto ✓`);
+      } else {
+        // Todas as refeições já feitas — adiciona como avulso
+        _fotoItens.forEach(it=>{
+          state.refeicoes[k].push({
+            foodId: null,
+            nome: it.nome || 'Alimento (foto)',
+            grams: it.quantidade_g,
+            kcal: it.kcal, p: it.proteina_g, c: it.carboidrato_g, g: it.gordura_g,
+            hora: horaAgora,
+            origem: 'foto'
+          });
+        });
+        toast(`${_fotoItens.length} ${_fotoItens.length===1?'item adicionado':'itens adicionados'} ✓`);
+      }
+
       saveState();
       renderDieta();
-      toast(`${_fotoItens.length} ${_fotoItens.length===1?'item adicionado':'itens adicionados'} ✓`);
       _fotoItens = [];
       renderFotoResultado();
       document.getElementById('foto-preview-wrap').hidden = true;
