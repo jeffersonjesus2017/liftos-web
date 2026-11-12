@@ -348,6 +348,14 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 .custom-item input[type="number"]{padding:5px 6px;font-size:12px;text-align:center}
 .custom-item .rm{appearance:none;background:transparent;border:0;color:var(--crit);font-size:16px;cursor:pointer;padding:0}
 .custom-item .kc{font-family:'JetBrains Mono',monospace;color:var(--ink-mute);font-size:10px}
+
+.foto-item{background:var(--surface-2);border-radius:10px;padding:10px;margin-bottom:8px;position:relative}
+.foto-item .rm{position:absolute;top:8px;right:8px;appearance:none;background:transparent;border:0;color:var(--crit);font-size:18px;line-height:1;cursor:pointer;padding:0}
+.foto-item input[type="text"]{font-weight:600;font-size:13px;width:calc(100% - 26px);margin-bottom:8px;padding:6px 8px}
+.foto-item .macros-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.foto-item .macros-grid div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.foto-item .macros-grid label{font-size:9px;color:var(--ink-mute);text-transform:uppercase;letter-spacing:0.02em}
+.foto-item input[type="number"]{padding:5px 4px;font-size:11px;text-align:center;width:100%}
 .custom-add{display:flex;gap:4px;margin-top:8px;position:relative}
 .custom-add input[type="text"]{flex:1;font-size:12px;padding:6px 8px}
 .custom-add input[type="number"]{width:60px;font-size:12px;padding:6px 8px;text-align:center}
@@ -784,6 +792,18 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
       <div class="progress-bar" id="progress-bar"></div>
       <h3>Seu plano alimentar</h3>
       <div id="plano-meals"></div>
+    </div>
+
+    <div class="card">
+      <h3>Registrar por foto 📷</h3>
+      <p style="font-size:12px;color:var(--ink-mute);margin:0 0 10px">Tire uma foto do prato ou alimento e a IA estima os macros — você revisa e ajusta antes de adicionar ao diário.</p>
+      <input type="file" id="foto-input" accept="image/*" capture="environment" hidden>
+      <button class="secondary" id="btn-foto-abrir" style="width:100%">📷 Tirar ou escolher foto</button>
+      <div id="foto-preview-wrap" hidden style="margin-top:10px">
+        <img id="foto-preview-img" alt="Pré-visualização da foto" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;display:block">
+      </div>
+      <div id="foto-status" style="margin-top:10px;font-size:12px;color:var(--ink-mute)"></div>
+      <div id="foto-resultado"></div>
     </div>
 
     <div class="card">
@@ -3696,6 +3716,144 @@ document.getElementById('btn-add-custom').addEventListener('click', ()=>{
   ['cf-nome','cf-kcal','cf-p','cf-c','cf-g','cf-un'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cf-porcao').value = 100;
   toast('Alimento salvo ✓');
+});
+
+// --------- registrar alimento por foto (análise automática via IA) ----------
+let _fotoItens = [];
+
+function comprimirImagem(file, maxDim=1024, qualidade=0.75){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let {width, height} = img;
+        if(width > maxDim || height > maxDim){
+          if(width > height){ height = Math.round(height * maxDim/width); width = maxDim; }
+          else { width = Math.round(width * maxDim/height); height = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', qualidade));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderFotoResultado(){
+  const wrap = document.getElementById('foto-resultado');
+  if(!wrap) return;
+  if(!_fotoItens.length){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700;margin:12px 0 8px">Itens identificados — revise antes de adicionar</div>
+    ${_fotoItens.map((it,i)=>`
+      <div class="foto-item">
+        <button class="rm" data-foto-rm="${i}" title="Remover">×</button>
+        <input type="text" value="${it.nome}" data-foto-field="nome" data-foto-i="${i}">
+        <div class="macros-grid">
+          <div><label>Gramas</label><input type="number" value="${Math.round(it.quantidade_g)}" min="0" step="1" data-foto-field="quantidade_g" data-foto-i="${i}"></div>
+          <div><label>Kcal</label><input type="number" value="${Math.round(it.kcal)}" min="0" step="1" data-foto-field="kcal" data-foto-i="${i}"></div>
+          <div><label>Prot.</label><input type="number" value="${Math.round(it.proteina_g)}" min="0" step="1" data-foto-field="proteina_g" data-foto-i="${i}"></div>
+          <div><label>Carb.</label><input type="number" value="${Math.round(it.carboidrato_g)}" min="0" step="1" data-foto-field="carboidrato_g" data-foto-i="${i}"></div>
+          <div><label>Gord.</label><input type="number" value="${Math.round(it.gordura_g)}" min="0" step="1" data-foto-field="gordura_g" data-foto-i="${i}"></div>
+        </div>
+      </div>
+    `).join('')}
+    <button class="primary" id="btn-foto-add-tudo" style="width:100%;margin-top:4px">Adicionar ${_fotoItens.length} ${_fotoItens.length===1?'item':'itens'} ao diário de hoje</button>
+  `;
+  wrap.querySelectorAll('[data-foto-field]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const i = Number(e.target.dataset.fotoI);
+      const field = e.target.dataset.fotoField;
+      _fotoItens[i][field] = field==='nome' ? e.target.value : (Number(e.target.value)||0);
+    });
+  });
+  wrap.querySelectorAll('[data-foto-rm]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.fotoRm);
+      _fotoItens.splice(i,1);
+      renderFotoResultado();
+    });
+  });
+  const btnAddTudo = document.getElementById('btn-foto-add-tudo');
+  if(btnAddTudo){
+    btnAddTudo.addEventListener('click', ()=>{
+      const k = todayKey();
+      state.refeicoes[k] = state.refeicoes[k]||[];
+      _fotoItens.forEach(it=>{
+        state.refeicoes[k].push({
+          foodId: null,
+          nome: it.nome || 'Alimento (foto)',
+          grams: it.quantidade_g,
+          kcal: it.kcal, p: it.proteina_g, c: it.carboidrato_g, g: it.gordura_g,
+          hora: new Date().toISOString(),
+          origem: 'foto'
+        });
+      });
+      saveState();
+      renderDieta();
+      toast(`${_fotoItens.length} ${_fotoItens.length===1?'item adicionado':'itens adicionados'} ✓`);
+      _fotoItens = [];
+      renderFotoResultado();
+      document.getElementById('foto-preview-wrap').hidden = true;
+      document.getElementById('foto-status').textContent = '';
+    });
+  }
+}
+
+document.getElementById('btn-foto-abrir').addEventListener('click', ()=>{
+  document.getElementById('foto-input').click();
+});
+
+document.getElementById('foto-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  const statusEl = document.getElementById('foto-status');
+  const previewWrap = document.getElementById('foto-preview-wrap');
+  const previewImg = document.getElementById('foto-preview-img');
+  _fotoItens = [];
+  renderFotoResultado();
+  try{
+    statusEl.textContent = 'Preparando imagem...';
+    const dataUrl = await comprimirImagem(file);
+    previewImg.src = dataUrl;
+    previewWrap.hidden = false;
+    statusEl.textContent = '🔎 Analisando a foto… isso pode levar alguns segundos';
+    const base64 = dataUrl.split(',')[1];
+    const resp = await fetch('/api/analisar-foto', {
+      method: 'POST',
+      headers: {'content-type':'application/json'},
+      body: JSON.stringify({ imageBase64: base64, mediaType: 'image/jpeg' })
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok || data.error){
+      statusEl.textContent = '⚠ ' + (data.error || 'Não foi possível analisar a foto.');
+      return;
+    }
+    if(!data.itens || !data.itens.length){
+      statusEl.textContent = data.observacao || 'Não consegui identificar alimentos nessa foto. Tente outro ângulo ou mais luz.';
+      return;
+    }
+    _fotoItens = data.itens.map(it=>({
+      nome: it.nome || 'Alimento',
+      quantidade_g: Number(it.quantidade_g)||0,
+      kcal: Number(it.kcal)||0,
+      proteina_g: Number(it.proteina_g)||0,
+      carboidrato_g: Number(it.carboidrato_g)||0,
+      gordura_g: Number(it.gordura_g)||0,
+    }));
+    statusEl.textContent = data.observacao ? `ℹ ${data.observacao}` : 'Confira e ajuste os valores antes de adicionar:';
+    renderFotoResultado();
+  }catch(err){
+    statusEl.textContent = '⚠ Erro ao analisar a foto. Tente novamente.';
+  }
 });
 
 function countRefHoje(){
