@@ -10,7 +10,7 @@
 // uso pessoal de registrar refeições.
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 // Modelo principal + fallback para quando o principal estiver sobrecarregado
 const MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
@@ -68,33 +68,50 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Imagem não enviada.' }, { status: 400 });
     }
 
-    // Tenta cada modelo na ordem; se o primeiro der 503 (overload), tenta o próximo
+    const requestBody = JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { inline_data: { mime_type: mediaType, data: imageBase64 } },
+            { text: PROMPT },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: RESPONSE_SCHEMA,
+      },
+    });
+
+    // Tenta cada modelo na ordem; se o primeiro der 503 (overload), tenta o próximo.
+    // Timeout de 25s por tentativa pra caber dentro do maxDuration de 60s.
     let geminiResp: Response | null = null;
     let usedModel = '';
     for (const model of MODELS) {
       usedModel = model;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      geminiResp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { inline_data: { mime_type: mediaType, data: imageBase64 } },
-                { text: PROMPT },
-              ],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: RESPONSE_SCHEMA,
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 25_000);
+      try {
+        geminiResp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-goog-api-key': apiKey,
           },
-        }),
-      });
+          body: requestBody,
+          signal: controller.signal,
+        });
+      } catch (fetchErr: any) {
+        clearTimeout(timer);
+        // Timeout ou erro de rede — trata como 503 pra tentar o próximo
+        if (model !== MODELS[MODELS.length - 1]) continue;
+        return Response.json(
+          { error: 'A análise demorou demais. Tente novamente em instantes.' },
+          { status: 504 }
+        );
+      }
+      clearTimeout(timer);
 
       // Se deu certo ou erro diferente de 503/429, para aqui
       if (geminiResp.ok || (geminiResp.status !== 503 && geminiResp.status !== 429)) break;
