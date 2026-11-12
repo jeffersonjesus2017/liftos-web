@@ -12,7 +12,7 @@
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'gemini-3.8-flash';
 
 const PROMPT = `Você é um nutricionista analisando uma foto de uma refeição ou alimento.
 Identifique cada alimento visível e estime, para a porção mostrada na foto:
