@@ -13,7 +13,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 // Modelo principal + fallback para quando o principal estiver sobrecarregado
-const MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+// gemini-3.5-flash-lite primeiro (mais rápido e estável); gemini-3.6-flash como fallback
+const MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
 
 const PROMPT = `Você é um nutricionista analisando uma foto de uma refeição ou alimento.
 Identifique cada alimento visível e estime, para a porção mostrada na foto:
