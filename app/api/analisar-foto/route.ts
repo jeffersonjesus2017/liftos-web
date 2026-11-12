@@ -12,7 +12,8 @@
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const MODEL = 'gemini-3.8-flash';
+// Modelo principal + fallback para quando o principal estiver sobrecarregado
+const MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
 
 const PROMPT = `Você é um nutricionista analisando uma foto de uma refeição ou alimento.
 Identifique cada alimento visível e estime, para a porção mostrada na foto:
@@ -67,40 +68,56 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Imagem não enviada.' }, { status: 400 });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-    const geminiResp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { inline_data: { mime_type: mediaType, data: imageBase64 } },
-              { text: PROMPT },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
+    // Tenta cada modelo na ordem; se o primeiro der 503 (overload), tenta o próximo
+    let geminiResp: Response | null = null;
+    let usedModel = '';
+    for (const model of MODELS) {
+      usedModel = model;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      geminiResp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
-      }),
-    });
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { inline_data: { mime_type: mediaType, data: imageBase64 } },
+                { text: PROMPT },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: RESPONSE_SCHEMA,
+          },
+        }),
+      });
 
-    if (!geminiResp.ok) {
-      const errText = await geminiResp.text().catch(() => '');
-      // 429 = estourou o limite gratuito diário/por minuto do Gemini
+      // Se deu certo ou erro diferente de 503/429, para aqui
+      if (geminiResp.ok || (geminiResp.status !== 503 && geminiResp.status !== 429)) break;
+
+      // Se é o último modelo, para também (vai cair no tratamento de erro abaixo)
+      if (model === MODELS[MODELS.length - 1]) break;
+
+      // Senão, tenta o próximo modelo
+    }
+
+    if (!geminiResp!.ok) {
+      const errText = await geminiResp!.text().catch(() => '');
+      const status = geminiResp!.status;
       const msg =
-        geminiResp.status === 429
+        status === 429
           ? 'Limite gratuito de análises por foto atingido por agora. Tente novamente em alguns minutos.'
-          : `Erro ao chamar a análise de imagem (${geminiResp.status}).`;
+          : status === 503
+          ? 'O serviço de análise está temporariamente sobrecarregado. Tente novamente em 1-2 minutos.'
+          : `Erro ao chamar a análise de imagem (${status}).`;
       return Response.json({ error: msg, detail: errText.slice(0, 500) }, { status: 502 });
     }
 
-    const data = await geminiResp.json();
+    const data = await geminiResp!.json();
 
     const blockReason = data?.promptFeedback?.blockReason;
     if (blockReason) {
