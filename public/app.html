@@ -3597,9 +3597,16 @@ document.getElementById('btn-salvar-aval').addEventListener('click', async ()=>{
     limparFotos();
   }
 
-  // atualiza também o peso do perfil pra manter IMC/TMB em dia
+  // atualiza o peso do perfil APENAS se esta avaliação for a mais recente —
+  // editar uma avaliação antiga (ex: apagar fotos de março) não deve
+  // sobrescrever o peso atual do perfil.
   if(peso!==''){
-    state.perfil.peso = peso;
+    const maisRecente = [...state.avaliacoes]
+      .filter(a=>a.peso)
+      .sort((a,b)=>b.data.localeCompare(a.data))[0];
+    if(maisRecente && maisRecente.data === data){
+      state.perfil.peso = peso;
+    }
   }
   saveState();
   toast('Avaliação salva ✓');
