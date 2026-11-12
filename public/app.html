@@ -3784,7 +3784,26 @@ function renderFotoResultado(){
     inp.addEventListener('input', e=>{
       const i = Number(e.target.dataset.fotoI);
       const field = e.target.dataset.fotoField;
-      _fotoItens[i][field] = field==='nome' ? e.target.value : (Number(e.target.value)||0);
+      const it = _fotoItens[i];
+      if(field==='nome'){
+        it.nome = e.target.value;
+      } else if(field==='quantidade_g' && it._kcalPorG !== undefined){
+        // recalcula macros proporcionalmente ao alterar gramas
+        const novaG = Number(e.target.value)||0;
+        it.quantidade_g = novaG;
+        it.kcal = Math.round(novaG * it._kcalPorG);
+        it.proteina_g = Math.round(novaG * it._protPorG);
+        it.carboidrato_g = Math.round(novaG * it._carbPorG);
+        it.gordura_g = Math.round(novaG * it._gordPorG);
+        // atualiza os campos visuais dos macros
+        const row = e.target.closest('.foto-item');
+        row.querySelector('[data-foto-field="kcal"]').value = it.kcal;
+        row.querySelector('[data-foto-field="proteina_g"]').value = it.proteina_g;
+        row.querySelector('[data-foto-field="carboidrato_g"]').value = it.carboidrato_g;
+        row.querySelector('[data-foto-field="gordura_g"]').value = it.gordura_g;
+      } else {
+        it[field] = Number(e.target.value)||0;
+      }
     });
   });
   wrap.querySelectorAll('[data-foto-rm]').forEach(btn=>{
@@ -3883,14 +3902,22 @@ document.getElementById('foto-input').addEventListener('change', async (e)=>{
       statusEl.textContent = data.observacao || 'Não consegui identificar alimentos nessa foto. Tente outro ângulo ou mais luz.';
       return;
     }
-    _fotoItens = data.itens.map(it=>({
-      nome: it.nome || 'Alimento',
-      quantidade_g: Number(it.quantidade_g)||0,
-      kcal: Number(it.kcal)||0,
-      proteina_g: Number(it.proteina_g)||0,
-      carboidrato_g: Number(it.carboidrato_g)||0,
-      gordura_g: Number(it.gordura_g)||0,
-    }));
+    _fotoItens = data.itens.map(it=>{
+      const g = Number(it.quantidade_g)||1; // evita divisão por 0
+      return {
+        nome: it.nome || 'Alimento',
+        quantidade_g: g,
+        kcal: Number(it.kcal)||0,
+        proteina_g: Number(it.proteina_g)||0,
+        carboidrato_g: Number(it.carboidrato_g)||0,
+        gordura_g: Number(it.gordura_g)||0,
+        // macros por grama (base pra recalcular ao editar gramas)
+        _kcalPorG: (Number(it.kcal)||0)/g,
+        _protPorG: (Number(it.proteina_g)||0)/g,
+        _carbPorG: (Number(it.carboidrato_g)||0)/g,
+        _gordPorG: (Number(it.gordura_g)||0)/g,
+      };
+    });
     statusEl.textContent = data.observacao ? `ℹ ${data.observacao}` : 'Confira e ajuste os valores antes de adicionar:';
     renderFotoResultado();
   }catch(err){
