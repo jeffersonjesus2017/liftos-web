@@ -4180,7 +4180,8 @@ function renderPlano(){
       const factor = it.g/100;
       const ikc = f.kc*factor, ip = f.p*factor, ic = f.c*factor, ig = f.g*factor;
       kc+=ikc; p+=ip; c+=ic; g+=ig;
-      return `<div class="item"><span>${it.g}g ${f.n}</span><span class="kc">${Math.round(ikc)} kcal</span></div>`;
+      const qty = f.un ? `${Math.round(it.g/f.un)} un` : `${it.g}g`;
+      return `<div class="item"><span>${qty} ${f.n}</span><span class="kc">${Math.round(ikc)} kcal</span></div>`;
     }).join('');
     const btnLabel = info ? 'Adicionar novamente' : 'Adicionar ao diário';
     return `
