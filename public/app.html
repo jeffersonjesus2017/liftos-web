@@ -305,6 +305,15 @@ svg.chart .axis{stroke:var(--line);stroke-width:1}
 .vshape-card .label{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700;margin-bottom:4px}
 .vshape-card .val{font-family:'Bebas Neue',sans-serif;font-size:32px;line-height:1;color:var(--accent)}
 .vshape-card .ref{font-size:11px;color:var(--ink-mute);font-family:'JetBrains Mono',monospace;margin-top:4px}
+/* Saúde metabólica */
+.saude-card{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.saude-item{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px}
+.saude-lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700;margin-bottom:2px}
+.saude-val{font-family:'Bebas Neue',sans-serif;font-size:28px;line-height:1;color:var(--accent)}
+.saude-ref{font-size:10px;font-family:'JetBrains Mono',monospace;margin-top:4px}
+.saude-nota{font-size:10px;margin-top:4px;padding:3px 6px;border-radius:4px;line-height:1.3}
+.saude-nota.ok{background:color-mix(in srgb, var(--ok) 15%, transparent);color:var(--ok)}
+.saude-nota.warn{background:color-mix(in srgb, var(--warn) 15%, transparent);color:var(--warn)}
 
 .empty{text-align:center;padding:24px 12px;color:var(--ink-mute);font-size:13px;border:1px dashed var(--line);border-radius:10px}
 
@@ -698,6 +707,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
           </optgroup>
           <optgroup label="Derivadas">
             <option value="_vshape">V-Shape (peito/cintura)</option>
+            <option value="_rcq">RCQ (cintura/quadril)</option>
           </optgroup>
         </select>
         <div class="chart-wrap"><svg class="chart" id="chart-corpo" viewBox="0 0 600 220" preserveAspectRatio="none"></svg></div>
@@ -3094,7 +3104,6 @@ function renderBackupBanner(){
 
 // --------- V-shape (ombro/cintura) ----------
 function calcVShape(aval){
-  // usa c_peito como proxy de ombro (medida de peito no padrão antropométrico = linha de ombros)
   if(aval.c_peito && aval.c_cintura){
     return +(aval.c_peito / aval.c_cintura).toFixed(3);
   }
@@ -3107,16 +3116,103 @@ function classificaVShape(v){
   if(v >= 1.3) return {t:'Médio', c:'var(--warn)'};
   return {t:'Em desenvolvimento', c:'var(--ink-mute)'};
 }
-function renderVShape(aval){
-  const v = calcVShape(aval);
-  if(!v) return '';
-  const c = classificaVShape(v);
+
+// --------- RCQ (relação cintura/quadril) ----------
+function calcRCQ(aval){
+  if(aval.c_cintura && aval.c_quadril){
+    return +(aval.c_cintura / aval.c_quadril).toFixed(3);
+  }
+  return null;
+}
+function classificaRCQ(v, sexo){
+  if(sexo === 'f'){
+    if(v <= 0.75) return {t:'Excelente', c:'var(--ok)'};
+    if(v <= 0.80) return {t:'Bom', c:'var(--ok)'};
+    if(v <= 0.85) return {t:'Moderado', c:'var(--warn)'};
+    return {t:'Risco elevado', c:'var(--crit, #e8371c)'};
+  }
+  if(v <= 0.85) return {t:'Excelente', c:'var(--ok)'};
+  if(v <= 0.90) return {t:'Bom', c:'var(--ok)'};
+  if(v <= 0.95) return {t:'Moderado', c:'var(--warn)'};
+  return {t:'Risco elevado', c:'var(--crit, #e8371c)'};
+}
+
+// --------- card integrado de saúde metabólica ----------
+function renderSaudeMetabolica(aval){
+  const sexo = state.perfil.sexo || 'm';
+  const vshape = calcVShape(aval);
+  const rcq = calcRCQ(aval);
+  // IMC e %G mais recentes (pode vir de outra avaliação se esta não tem peso)
+  const avalList = [...state.avaliacoes].sort((a,b)=>a.data.localeCompare(b.data));
+  const ultComPeso = [...avalList].reverse().find(a=>a.peso);
+  const ultComPctG = [...avalList].reverse().find(a=>a.pctG!=='' && a.pctG!==undefined && a.pctG!==null);
+  const peso = ultComPeso ? ultComPeso.peso : state.perfil.peso;
+  const altM = state.perfil.altura / 100;
+  const imc = peso && altM ? +(peso / (altM*altM)).toFixed(1) : null;
+  const pctG = ultComPctG ? +ultComPctG.pctG : null;
+
+  if(!vshape && !rcq && !imc) return '';
+
+  let items = [];
+
+  // V-Shape
+  if(vshape){
+    const vc = classificaVShape(vshape);
+    items.push(`<div class="saude-item">
+      <div class="saude-lbl">V-Shape</div>
+      <div class="saude-val">${vshape}</div>
+      <div class="saude-ref" style="color:${vc.c}">${vc.t} · ref: 1,618</div>
+    </div>`);
+  }
+
+  // RCQ
+  if(rcq){
+    const rc = classificaRCQ(rcq, sexo);
+    items.push(`<div class="saude-item">
+      <div class="saude-lbl">RCQ (cintura/quadril)</div>
+      <div class="saude-val">${rcq}</div>
+      <div class="saude-ref" style="color:${rc.c}">${rc.t} · ref ${sexo==='m'?'♂ <0,90':'♀ <0,80'}</div>
+    </div>`);
+  }
+
+  // IMC contextualizado
+  if(imc){
+    const cat = imcCategoria(imc);
+    let nota = '';
+    // Se %G baixo mas IMC alto → é massa magra
+    if(pctG !== null && imc >= 25 && pctG < 18){
+      nota = `<div class="saude-nota ok">✓ IMC elevado por massa magra (${pctG}% gordura)</div>`;
+    } else if(pctG !== null && imc >= 25 && pctG >= 18 && pctG < 25){
+      nota = `<div class="saude-nota warn">IMC e %G moderados — acompanhar</div>`;
+    } else if(pctG !== null && imc < 25 && pctG < 15){
+      nota = `<div class="saude-nota ok">✓ Composição corporal saudável</div>`;
+    }
+    items.push(`<div class="saude-item">
+      <div class="saude-lbl">IMC</div>
+      <div class="saude-val">${imc}</div>
+      <div class="saude-ref" style="color:var(--${cat.c})">${cat.t}</div>
+      ${nota}
+    </div>`);
+  }
+
+  // Cintura isolada (risco cardiovascular)
+  if(aval.c_cintura){
+    const limCint = sexo === 'm' ? 94 : 80;
+    const limAlto = sexo === 'm' ? 102 : 88;
+    let cintCls, cintTxt;
+    if(aval.c_cintura < limCint){ cintCls = 'ok'; cintTxt = 'Baixo risco'; }
+    else if(aval.c_cintura < limAlto){ cintCls = 'warn'; cintTxt = 'Risco moderado'; }
+    else { cintCls = 'crit'; cintTxt = 'Risco elevado'; }
+    items.push(`<div class="saude-item">
+      <div class="saude-lbl">Cintura</div>
+      <div class="saude-val">${aval.c_cintura} cm</div>
+      <div class="saude-ref" style="color:var(--${cintCls})">${cintTxt} · ref ${sexo==='m'?'♂ <94':'♀ <80'} cm</div>
+    </div>`);
+  }
+
   return `
-    <div class="vshape-card">
-      <div class="label">V-Shape (peito/cintura)</div>
-      <div class="val">${v}</div>
-      <div class="ref" style="color:${c.c}">${c.t} · ref: 1,618 (golden)</div>
-    </div>
+    <div style="margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">Saúde metabólica</div>
+    <div class="saude-card">${items.join('')}</div>
   `;
 }
 function renderFotosRow(aval){
@@ -3220,7 +3316,7 @@ function renderHistCorpo(){
       ${bloco('Composição', ['peso','mm','mg','pctG'])}
       ${bloco('Dobras cutâneas', ['d_soma','d_peitoral','d_triceps','d_abdom','d_coxa','d_axilar','d_subesc','d_supra'])}
       ${bloco('Circunferências', ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant'])}
-      ${renderVShape(ult)}
+      ${renderSaudeMetabolica(ult)}
       ${renderFotosRow(ult)}
       ${ult.obs?`<div style="margin-top:12px;padding:10px;background:var(--surface-2);border-radius:8px;font-size:13px;color:var(--ink-dim)"><strong>Obs:</strong> ${ult.obs}</div>`:''}
       ${resumoFaseHtml ? `
@@ -3328,6 +3424,11 @@ function drawChartCorpo(){
     list = [...state.avaliacoes]
       .map(a=>({...a, _vshape: calcVShape(a)}))
       .filter(a=>a._vshape!==null)
+      .sort((a,b)=>a.data.localeCompare(b.data));
+  } else if(key === '_rcq'){
+    list = [...state.avaliacoes]
+      .map(a=>({...a, _rcq: calcRCQ(a)}))
+      .filter(a=>a._rcq!==null)
       .sort((a,b)=>a.data.localeCompare(b.data));
   } else {
     list = [...state.avaliacoes].filter(a=>a[key]!==undefined && a[key]!=='').sort((a,b)=>a.data.localeCompare(b.data));
@@ -4383,7 +4484,13 @@ function renderPerfil(){
   const pct = Math.max(0, Math.min(100, ((r.imc-15)/(35-15))*100));
   document.getElementById('imc-mark').style.left = pct+'%';
   const cat = imcCategoria(r.imc);
-  document.getElementById('imc-cat').innerHTML = `<span class="pill ${cat.c}">${cat.t}</span>`;
+  // Contexto: se %G da última avaliação é baixo mas IMC alto → massa magra
+  const ultAvalG = [...state.avaliacoes].sort((a,b)=>b.data.localeCompare(a.data)).find(a=>a.pctG!=='' && a.pctG!==undefined && a.pctG!==null);
+  let imcNota = '';
+  if(ultAvalG && r.imc >= 25 && +ultAvalG.pctG < 18){
+    imcNota = `<div style="font-size:11px;color:var(--ok);margin-top:6px">✓ Elevado por massa magra (${ultAvalG.pctG}% gordura)</div>`;
+  }
+  document.getElementById('imc-cat').innerHTML = `<span class="pill ${cat.c}">${cat.t}</span>${imcNota}`;
 }
 
 document.getElementById('btn-salvar-perfil').addEventListener('click', ()=>{
