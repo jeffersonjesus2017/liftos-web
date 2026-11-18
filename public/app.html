@@ -1409,6 +1409,23 @@ const MICROS = {
   cerveja:[0,0,5,7,29,0,4,0,0,0,0,6],
   vinho_t:[0,0.5,8,10,100,0.1,4,0,0,0,0,0],
 };
+// Alimentos cadastrados pelas contas (ids fixos): linhas próprias (TACO onde existe; senão USDA) ou alias de um alimento da base
+const MICROS_EXTRA = {
+  tc_ricota:[0,0.1,253,12,112,0.5,283,100,0,0.1,0.4,12],
+  tc_amendoas:[12.5,3.7,269,270,733,3.1,1,0,0,0,0,44],
+  tc_tamara:[6.7,0.9,64,54,696,0.4,1,0,0,0,0,15],
+  tc_chia:[34,7.7,631,335,407,4.6,16,0,1.6,0,0,49],
+  tc_sardinha:[0,3.5,550,35,367,1.6,666,0,0,4.8,8.9,10],
+  tc_atum_ag:[0,1,10,27,237,0.8,247,16,0,1.7,2.2,4],
+  tc_berinjela:[2.5,0.2,11,9,105,0.1,1,1,0,0,0,14],
+  tc_couve_fl:[2.1,0.1,16,5,80,0.3,2,0,23.7,0,0,44],
+  u1793984464904:[0,2.4,5,21,386,5.1,58,0,0,0.1,2.5,9],
+};
+const MICRO_ALIAS = {u1793781417437:'pao_fat', u1793821828271:'leite_in', u1793821987959:'whey', u1794239859670:'abacaxi'};
+function microRow(fid){
+  if(!fid) return null;
+  return MICROS[fid] || MICROS_EXTRA[fid] || (MICRO_ALIAS[fid] && MICROS[MICRO_ALIAS[fid]]) || null;
+}
 // Alvos diários (RDA/AI — DRI/IOM) por sexo e idade; sódio é teto (OMS: 2000 mg)
 function alvosMicro(sexo, idade){
   const f = sexo === 'f';
@@ -1433,7 +1450,7 @@ function totaisMicro(list){
   const tot = {}; MICRO_DEF.forEach(m=>tot[m.k]=0);
   let semDados = 0;
   (list||[]).forEach(r=>{
-    const row = r.foodId && MICROS[r.foodId];
+    const row = microRow(r.foodId);
     if(!row){ semDados++; return; }
     const fator = (r.grams||0)/100;
     MICRO_DEF.forEach((m,i)=>{ tot[m.k] += row[i]*fator; });
@@ -1460,19 +1477,36 @@ function renderMicrosDieta(){
   const alvos = alvosMicro(state.perfil.sexo, state.perfil.idade);
   const list = state.refeicoes[todayKey()]||[];
   const {tot, semDados} = totaisMicro(list);
+  // projeção: registrado hoje + opção selecionada das refeições do plano ainda não feitas
+  let proj = {...tot}, nPend = 0;
+  try{
+    const feitas = countRefHoje();
+    const sels = state._selectedOpt || {};
+    const pend = [];
+    (state.planoAlimentar||[]).forEach(meal=>{
+      if(feitas[meal.id]) return;
+      const opt = meal.opcoes && meal.opcoes[sels[meal.id] ?? 0];
+      if(!opt) return;
+      nPend++;
+      opt.itens.forEach(it=>pend.push({foodId:it.fid, grams:it.g}));
+    });
+    const pj = totaisMicro(pend).tot;
+    MICRO_DEF.forEach(m=>{ proj[m.k] = tot[m.k] + pj[m.k]; });
+  }catch(e){ proj = {...tot}; nPend = 0; }
   const linhas = MICRO_DEF.map(m=>{
     const v = tot[m.k], a = alvos[m.k];
     const pct = a ? v/a*100 : 0;
+    const pctProj = a ? proj[m.k]/a*100 : 0;
     let cls, barCor;
     if(m.max){ cls = pct>100?'crit':pct>75?'warn':'ok'; }
     else { cls = pct>=90?'ok':pct>=50?'warn':'crit'; }
     barCor = `var(--${cls==='crit'?'crit':cls==='warn'?'warn':'ok'})`;
     const fmt = x=> x>=100 ? Math.round(x) : x>=10 ? x.toFixed(0) : x.toFixed(1);
-    return {m, v, a, pct, cls, barCor, fmt};
+    return {m, v, a, pct, pctProj, vProj: proj[m.k], cls, barCor, fmt};
   });
-  const faltam = linhas.filter(l=>!l.m.max && l.pct<90).sort((a,b)=>a.pct-b.pct);
+  const faltam = linhas.filter(l=>!l.m.max && l.pctProj<90).sort((a,b)=>a.pctProj-b.pctProj);
   const sug = faltam.slice(0,3).map(l=>{
-    const s = sugestoesMicro(l.m.k, l.a-l.v, l.a);
+    const s = sugestoesMicro(l.m.k, l.a-l.vProj, l.a);
     if(!s.length) return '';
     const itens = s.map(x=>{
       const qtd = x.f.un ? `${Math.max(1,Math.round(x.g/x.f.un))} un` : `${Math.round(x.g/10)*10||x.g} g`;
@@ -1490,14 +1524,14 @@ function renderMicrosDieta(){
           <div style="margin-bottom:8px">
             <div style="display:flex;justify-content:space-between;font-size:12px">
               <span>${l.m.n}${l.m.max?' <span style="color:var(--ink-mute)">(máx.)</span>':''}</span>
-              <span style="font-family:'JetBrains Mono',monospace;color:var(--ink-dim)">${l.fmt(l.v)} / ${l.fmt(l.a)} ${l.m.u} · <span style="color:${l.barCor}">${Math.round(l.pct)}%</span></span>
+              <span style="font-family:'JetBrains Mono',monospace;color:var(--ink-dim)">${l.fmt(l.v)} / ${l.fmt(l.a)} ${l.m.u} · <span style="color:${l.barCor}">${Math.round(l.pct)}%</span>${nPend?` <span style="color:var(--ink-mute)" title="se seguir o plano do dia">→ ${Math.round(l.pctProj)}%</span>`:''}</span>
             </div>
             <div style="height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:3px">
               <div style="height:100%;width:${Math.min(100,l.pct)}%;background:${l.barCor}"></div>
             </div>
           </div>`).join('')}
-        ${sug ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">Para fechar o alvo</div>${sug}</div>` : (list.length ? '<div style="margin-top:10px;font-size:12px;color:var(--ok)">✓ Alvos principais atingidos hoje</div>' : '')}
-        <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Alvos RDA/AI por sexo e idade do perfil. Fibra, minerais e vit. A/C vêm da TACO; vit. D, B12 e folato são aproximações (USDA).${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
+        ${sug ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">${nPend?'Mesmo seguindo o plano, ainda falta':'Para fechar o alvo'}</div>${sug}</div>` : (list.length ? `<div style="margin-top:10px;font-size:12px;color:var(--ok)">✓ ${nPend?'O plano do dia fecha os alvos principais':'Alvos principais atingidos hoje'}</div>` : '')}
+        <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Alvos RDA/AI por sexo e idade do perfil. Fibra, minerais e vit. A/C vêm da TACO; vit. D, B12 e folato são aproximações (USDA).${nPend?' "→ %" = projeção se seguir o plano (opção selecionada de cada refeição pendente).':''}${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
       </div>
     </details>`;
 }
