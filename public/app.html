@@ -1472,7 +1472,7 @@ function totaisMicro(list){
 }
 // Alimentos que mais ajudam a fechar um nutriente (por %DRI a cada 100 kcal), sem ultraprocessados/bebidas
 const MICRO_EXCLUIR = new Set(['azeite','oleo_so','manteiga','cafe_po','achocolatado','barra_cereal','coxinha','pastel','pizza_m','xburger','coca','cerveja','vinho_t','mel','polvilho','tapioca','farinha_a','arroz_cru','whey','prot_soja']);
-function sugestoesMicro(key, falta, alvo){
+function sugestoesMicro(key, falta, alvo, n){
   const idx = MICRO_DEF.findIndex(m=>m.k===key);
   return FOODS
     .filter(f=>MICROS[f.id] && !MICRO_EXCLUIR.has(f.id) && f.kc>0 && MICROS[f.id][idx]>0)
@@ -1480,9 +1480,9 @@ function sugestoesMicro(key, falta, alvo){
       const por100 = MICROS[f.id][idx];
       return {f, dens: (por100/alvo*100)/(f.kc/100), g: Math.round(falta/por100*100)};
     })
-    .filter(s=>s.g>0 && s.g<=400)
+    .filter(s=>s.g>0 && s.g<=400 && !(s.f.un && s.g/s.f.un>8))
     .sort((a,b)=>b.dens-a.dens)
-    .slice(0,3);
+    .slice(0, n||3);
 }
 function renderMicrosDieta(){
   const el = document.getElementById('dieta-micros');
@@ -1493,6 +1493,8 @@ function renderMicrosDieta(){
   const {tot, semDados} = totaisMicro(list);
   // projeção: registrado hoje + opção selecionada das refeições do plano ainda não feitas
   let proj = {...tot}, nPend = 0;
+  const foodsAll = allFoods();
+  const itensDia = list.map(r=>({foodId:r.foodId, nome:r.nome, grams:r.grams||0, origem:'reg'}));
   try{
     const feitas = countRefHoje();
     const sels = state._selectedOpt || {};
@@ -1502,7 +1504,11 @@ function renderMicrosDieta(){
       const opt = meal.opcoes && meal.opcoes[sels[meal.id] ?? 0];
       if(!opt) return;
       nPend++;
-      opt.itens.forEach(it=>pend.push({foodId:it.fid, grams:it.g}));
+      opt.itens.forEach(it=>{
+        pend.push({foodId:it.fid, grams:it.g});
+        const fd = foodsAll.find(f=>f.id===it.fid);
+        itensDia.push({foodId:it.fid, nome:fd?fd.n:it.fid, grams:it.g, origem:'plano'});
+      });
     });
     const pj = totaisMicro(pend).tot;
     MICRO_DEF.forEach(m=>{ proj[m.k] = tot[m.k] + pj[m.k]; });
@@ -1520,15 +1526,32 @@ function renderMicrosDieta(){
     const fmt = x=> x>=100 ? Math.round(x) : x>=10 ? x.toFixed(0) : x.toFixed(1);
     return {m, modo, v, a, pct, pctProj, vProj: proj[m.k], cls, barCor, fmt};
   });
+  const limpa = n=>String(n||'').replace(/\s*\(.*?\)/g,'');
+  const qtdTxt = (fid,g)=>{ const fd = foodsAll.find(f=>f.id===fid); return fd && fd.un ? `${Math.max(1,Math.round(g/fd.un))} un` : `${Math.round(g)} g`; };
+  const contribuintes = (m, a)=>{
+    const idx = MICRO_DEF.findIndex(x=>x.k===m.k);
+    const agg = {};
+    itensDia.forEach(it=>{
+      const row = microRow(it.foodId);
+      if(!row) return;
+      const val = row[idx]*it.grams/100;
+      if(!(val>0)) return;
+      const key = it.foodId;
+      agg[key] = agg[key] || {nome:it.nome, fid:it.foodId, val:0, g:0, reg:false, plano:false};
+      agg[key].val += val; agg[key].g += it.grams;
+      if(it.origem==='reg') agg[key].reg = true; else agg[key].plano = true;
+    });
+    return Object.values(agg).sort((x,y)=>y.val-x.val);
+  };
   const faltam = linhas.filter(l=>l.modo==='meta' && l.pctProj<90).sort((a,b)=>a.pctProj-b.pctProj);
-  const sug = faltam.slice(0,3).map(l=>{
-    const s = sugestoesMicro(l.m.k, l.a-l.vProj, l.a);
+  const sug = faltam.map(l=>{
+    const s = sugestoesMicro(l.m.k, l.a-l.vProj, l.a, 5);
     if(!s.length) return '';
     const itens = s.map(x=>{
       const qtd = x.f.un ? `${Math.max(1,Math.round(x.g/x.f.un))} un` : `${Math.round(x.g/10)*10||x.g} g`;
       return `${x.f.n.replace(/\s*\(.*?\)/g,'')} (${qtd})`;
     }).join(' · ');
-    return `<div style="font-size:12px;margin-top:6px"><strong>${l.m.n}:</strong> <span style="color:var(--ink-dim)">${itens}</span></div>`;
+    return `<div style="font-size:12px;margin-top:8px"><strong>${l.m.n}</strong> <span style="color:var(--ink-mute)">(faltam ${l.fmt(Math.max(0,l.a-l.vProj))} ${l.m.u})</span><div style="color:var(--ink-dim);margin-top:2px">${itens}</div></div>`;
   }).join('');
   el.innerHTML = `
     <details style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px">
@@ -1536,8 +1559,12 @@ function renderMicrosDieta(){
         Micronutrientes <span style="font-weight:400;color:var(--ink-mute);text-transform:none">· ${linhas.filter(l=>l.modo==='meta'&&l.pct>=90).length}/${linhas.filter(l=>l.modo==='meta').length} no alvo</span>
       </summary>
       <div style="margin-top:10px">
-        ${linhas.map(l=>`
-          <div style="margin-bottom:8px">
+        ${linhas.map(l=>{
+          const cs = contribuintes(l.m, l.a);
+          const corpo = cs.length ? cs.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:2px 0;color:var(--ink-dim)"><span>${limpa(c.nome)} <span style="color:var(--ink-mute)">· ${qtdTxt(c.fid,c.g)}${c.plano&&!c.reg?' · plano':''}</span></span><span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${l.fmt(c.val)} ${l.m.u} · ${Math.round(c.val/l.a*100)}%</span></div>`).join('') : '<div style="font-size:11px;color:var(--ink-mute);padding:2px 0">Nenhum alimento com este nutriente no dia</div>';
+          return `
+          <details style="margin-bottom:8px">
+            <summary style="cursor:pointer;list-style:none">
             <div style="display:flex;justify-content:space-between;font-size:12px">
               <span>${l.m.n}${l.modo==='max'?' <span style="color:var(--ink-mute)">(máx.)</span>':l.modo==='info'?' <span style="color:var(--ink-mute)">(só acompanhar)</span>':''}</span>
               <span style="font-family:'JetBrains Mono',monospace;color:var(--ink-dim)">${l.fmt(l.v)} / ${l.fmt(l.a)} ${l.m.u} · <span style="color:${l.barCor}">${Math.round(l.pct)}%</span>${nPend?` <span style="color:var(--ink-mute)" title="se seguir o plano do dia">→ ${Math.round(l.pctProj)}%</span>`:''}</span>
@@ -1545,9 +1572,11 @@ function renderMicrosDieta(){
             <div style="height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:3px">
               <div style="height:100%;width:${Math.min(100,l.pct)}%;background:${l.barCor}"></div>
             </div>
-          </div>`).join('')}
-        ${sug ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">${nPend?'Mesmo seguindo o plano, ainda falta':'Para fechar o alvo'}</div>${sug}</div>` : (list.length ? `<div style="margin-top:10px;font-size:12px;color:var(--ok)">✓ ${nPend?'O plano do dia fecha os alvos principais':'Alvos principais atingidos hoje'}</div>` : '')}
-        <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Alvos RDA/AI por sexo e idade do perfil. Fibra, minerais e vit. A/C vêm da TACO; vit. D, B12 e folato são aproximações (USDA).${nPend?' "→ %" = projeção se seguir o plano (opção selecionada de cada refeição pendente).':''}${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
+            </summary>
+            <div style="margin:6px 0 2px 8px;padding-left:8px;border-left:2px solid var(--line)">${corpo}</div>
+          </details>`;}).join('')}
+        ${sug ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">${nPend?'Mesmo seguindo o plano, ainda falta':'Ainda falta para fechar o alvo'}</div>${sug}</div>` : (list.length ? `<div style="margin-top:10px;font-size:12px;color:var(--ok)">✓ ${nPend?'O plano do dia fecha os alvos principais':'Alvos principais atingidos hoje'}</div>` : '')}
+        <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Toque em um nutriente para ver de quais alimentos vem. Alvos RDA/AI por sexo e idade do perfil. Fibra, minerais e vit. A/C vêm da TACO; vit. D, B12 e folato são aproximações (USDA).${nPend?' "→ %" = projeção se seguir o plano (opção selecionada de cada refeição pendente).':''}${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
       </div>
     </details>`;
 }
