@@ -8,12 +8,13 @@
 //  - /vendor, ícones e manifest: cache primeiro (arquivos com versão fixa ou que quase não mudam).
 //  - Para publicar uma nova versão do casco, basta mudar CACHE_VERSION.
 
-const CACHE_VERSION = 'lift-v1';
+const CACHE_VERSION = 'lift-v2';   // suba ao regenerar /taco.json (cache-primeiro)
 const SHELL = [
   '/app.html',
   '/app.js',
   '/vendor/supabase-js-2.119.1.js',
   '/vendor/jspdf-2.5.1.umd.min.js',
+  '/taco.json',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',

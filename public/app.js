@@ -265,9 +265,32 @@ const MICROS_EXTRA = {
   u1793984464904:[0,2.4,5,21,386,5.1,58,0,0,0.1,2.5,9],
 };
 const MICRO_ALIAS = {u1793781417437:'pao_fat', u1793821828271:'leite_in', u1793821987959:'whey', u1794239859670:'abacaxi'};
+// ---- TACO completa (public/taco.json, gerado por scripts/gerar-taco.mjs) ----
+// Carregada em segundo plano; ids 'taco_<n>'. A TACO não traz vit. D, B12 e folato: ficam null ("sem dado").
+let TACO_FOODS = [];
+const TACO_MICROS = {};
+function aplicarTaco(dados){
+  const foods = [], micros = {};
+  (dados && dados.foods || []).forEach(r=>{
+    const id = 'taco_' + r[0];
+    foods.push({id, n:r[1], kc:r[2], p:r[3], c:r[4], g:r[5], taco:true});
+    micros[id] = r[6];
+  });
+  TACO_FOODS = foods;
+  Object.keys(TACO_MICROS).forEach(k=>delete TACO_MICROS[k]);
+  Object.assign(TACO_MICROS, micros);
+}
+async function carregarTaco(){
+  try{
+    const r = await fetch('/taco.json');
+    if(!r.ok) throw new Error('taco.json HTTP ' + r.status);
+    aplicarTaco(await r.json());
+    rerenderAtual();   // registros com alimentos TACO passam a ter micronutrientes
+  }catch(e){ console.error('[taco]', e); reportarErro('error', 'falha ao carregar taco.json: ' + (e && e.message)); }
+}
 function microRow(fid){
   if(!fid) return null;
-  return MICROS[fid] || MICROS_EXTRA[fid] || (MICRO_ALIAS[fid] && MICROS[MICRO_ALIAS[fid]]) || null;
+  return MICROS[fid] || MICROS_EXTRA[fid] || (MICRO_ALIAS[fid] && MICROS[MICRO_ALIAS[fid]]) || TACO_MICROS[fid] || null;
 }
 // Alvos diários (RDA/AI — DRI/IOM) por sexo e idade; sódio é teto (OMS: 2000 mg)
 function alvosMicro(sexo, idade, over){
@@ -304,7 +327,7 @@ function totaisMicro(list){
     const row = microRow(r.foodId);
     if(!row){ semDados++; return; }
     const fator = (r.grams||0)/100;
-    MICRO_DEF.forEach((m,i)=>{ tot[m.k] += row[i]*fator; });
+    MICRO_DEF.forEach((m,i)=>{ tot[m.k] += (row[i]||0)*fator; });
   });
   return {tot, semDados};
 }
@@ -400,18 +423,22 @@ function renderMicrosDieta(){
         ${linhas.map(l=>{
           const cs = contribuintes(l.m, l.a);
           const corpo = cs.length ? cs.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:2px 0;color:var(--ink-dim)"><span>${esc(limpa(c.nome))} <span style="color:var(--ink-mute)">· ${qtdTxt(c.fid,c.g)}${c.plano&&!c.reg?' · plano':''}</span></span><span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${l.fmt(c.val)} ${l.m.u} · ${Math.round(c.val/l.a*100)}%</span></div>`).join('') : '<div style="font-size:11px;color:var(--ink-mute);padding:2px 0">Nenhum alimento com este nutriente no dia</div>';
+          // alimentos do dia sem dado deste nutriente (ex.: TACO não traz vit. D, B12 e folato)
+          const idxN = MICRO_DEF.findIndex(x=>x.k===l.m.k), vistosN = new Set(), lac = [];
+          itensDia.forEach(it=>{ const rw = microRow(it.foodId); if(rw && rw[idxN]==null && !vistosN.has(it.foodId)){ vistosN.add(it.foodId); lac.push(limpa(it.nome)); } });
+          const aviso = lac.length ? `<div style="font-size:11px;color:var(--warn);padding:4px 0 2px">⚠ Sem dado de ${l.m.n} na TACO para: ${esc(lac.slice(0,6).join(', '))}${lac.length>6?` e mais ${lac.length-6}`:''}. O total pode estar subestimado.</div>` : '';
           return `
           <details style="margin-bottom:8px">
             <summary style="cursor:pointer;list-style:none">
             <div style="display:flex;justify-content:space-between;font-size:12px">
-              <span>${l.m.n}${l.modo==='max'?' <span style="color:var(--ink-mute)">(máx.)</span>':l.modo==='info'?' <span style="color:var(--ink-mute)">(só acompanhar)</span>':''}</span>
+              <span>${l.m.n}${lac.length?'*':''}${l.modo==='max'?' <span style="color:var(--ink-mute)">(máx.)</span>':l.modo==='info'?' <span style="color:var(--ink-mute)">(só acompanhar)</span>':''}</span>
               <span style="font-family:'JetBrains Mono',monospace;color:var(--ink-dim)">${l.fmt(l.v)} / ${l.fmt(l.a)} ${l.m.u} · <span style="color:${l.barCor}">${Math.round(l.pct)}%</span>${nPend?` <span style="color:var(--ink-mute)" title="se seguir o plano do dia">→ ${Math.round(l.pctProj)}%</span>`:''}</span>
             </div>
             <div style="height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:3px">
               <div style="height:100%;width:${Math.min(100,l.pct)}%;background:${l.barCor}"></div>
             </div>
             </summary>
-            <div style="margin:6px 0 2px 8px;padding-left:8px;border-left:2px solid var(--line)">${corpo}</div>
+            <div style="margin:6px 0 2px 8px;padding-left:8px;border-left:2px solid var(--line)">${corpo}${aviso}</div>
           </details>`;}).join('')}
         ${sug ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">${nPend?'Mesmo seguindo o plano, ainda falta':'Ainda falta para fechar o alvo'}</div>${sug}</div>` : (list.length ? `<div style="margin-top:10px;font-size:12px;color:var(--ok)">✓ ${nPend?'O plano do dia fecha os alvos principais':'Alvos principais atingidos hoje'}</div>` : '')}
         <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Toque em um nutriente para ver de quais alimentos vem. Alvos RDA/AI por sexo e idade do perfil. Fibra, minerais e vit. A/C vêm da TACO; vit. D, B12 e folato são aproximações (USDA).${nPend?' "→ %" = projeção se seguir o plano (opção selecionada de cada refeição pendente).':''}${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
@@ -941,6 +968,8 @@ document.addEventListener('keydown', e=>{
     document.getElementById('modal-ok').click();
   }
 });
+
+carregarTaco();
 
 // --------- service worker (necessário pro iOS mostrar notificação local) ----------
 if('serviceWorker' in navigator){
@@ -2888,16 +2917,24 @@ function limparFormAval(){
 }
 
 // --------- dieta ----------
-function allFoods(){ return [...FOODS, ...state.alimentosCustom]; }
+function allFoods(){ return [...FOODS, ...state.alimentosCustom, ...TACO_FOODS]; }
+
+// Busca sem acento/maiúscula; começa-com vem antes de contém; curados/próprios antes da TACO (ordem estável)
+function normBusca(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+function buscarAlimentos(q, n){
+  const nq = normBusca(q);
+  return allFoods().map((f,i)=>({f,i,nn:normBusca(f.n)})).filter(x=>x.nn.includes(nq))
+    .sort((a,b)=>(b.nn.startsWith(nq)-a.nn.startsWith(nq)) || (a.i-b.i)).slice(0,n).map(x=>x.f);
+}
 
 let selectedFood = null;
 const searchInput = document.getElementById('food-search');
 const resultsBox = document.getElementById('food-results');
 
 searchInput.addEventListener('input', ()=>{
-  const q = searchInput.value.trim().toLowerCase();
+  const q = searchInput.value.trim();
   if(q.length<2){ resultsBox.hidden = true; return; }
-  const matches = allFoods().filter(f=>f.n.toLowerCase().includes(q)).slice(0,8);
+  const matches = buscarAlimentos(q, 10);
   if(!matches.length){ resultsBox.hidden = true; return; }
   resultsBox.innerHTML = matches.map(f=>
     `<button data-fid="${f.id}">${esc(f.n)}<span class="kc">${f.kc} kcal</span></button>`
@@ -3322,9 +3359,9 @@ function renderCustomModal(){
   const results = document.getElementById('custom-results');
   busca.addEventListener('input', ()=>{
     _customSelectedFood = null; // digitar de novo invalida a seleção anterior
-    const q = busca.value.trim().toLowerCase();
+    const q = busca.value.trim();
     if(q.length < 2){ results.hidden = true; return; }
-    const matches = allFoods().filter(f=>f.n.toLowerCase().includes(q)).slice(0,6);
+    const matches = buscarAlimentos(q, 8);
     if(!matches.length){ results.hidden = true; return; }
     results.innerHTML = matches.map(f=>`<button data-fid="${f.id}">${esc(f.n)} — ${f.kc}kcal/100g</button>`).join('');
     results.hidden = false;
