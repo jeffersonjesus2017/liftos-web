@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>LIFT</title>
 <!-- v46 wrapped as standalone document for Vercel deploy (fixes missing viewport meta from artifact-only markup) -->
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -104,6 +104,8 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 label{display:block;font-size:12px;color:var(--ink-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px}
 input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:15px;min-width:0}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+/* Zoom liberado (acessibilidade): em telas de toque o iOS só dá zoom automático ao focar campos < 16px */
+@media (pointer:coarse){input,select,textarea{font-size:16px !important}}
 input[type="number"]{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
 button.primary{appearance:none;background:var(--accent);color:var(--accent-ink);border:0;padding:12px 16px;border-radius:8px;font:inherit;font-weight:700;cursor:pointer;letter-spacing:0.02em;text-transform:uppercase;font-size:13px}
 button.primary:hover{filter:brightness(1.05)}
