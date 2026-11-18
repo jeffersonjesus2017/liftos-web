@@ -909,6 +909,11 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
           <span id="agua-sugestao"></span>
         </div>
       </div>
+      <details style="margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 12px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase">Metas de micronutrientes</summary>
+        <div style="font-size:11px;color:var(--ink-mute);margin:8px 0">Vazio = meta automática (RDA/AI por sexo e idade). Ajuste conforme orientação do seu médico ou nutricionista, por exemplo conforme exames.</div>
+        <div id="p-micros-lista"></div>
+      </details>
       <div style="margin-top:14px;display:flex;gap:8px">
         <button class="primary" id="btn-salvar-perfil">Salvar perfil</button>
       </div>
@@ -1427,10 +1432,10 @@ function microRow(fid){
   return MICROS[fid] || MICROS_EXTRA[fid] || (MICRO_ALIAS[fid] && MICROS[MICRO_ALIAS[fid]]) || null;
 }
 // Alvos diários (RDA/AI — DRI/IOM) por sexo e idade; sódio é teto (OMS: 2000 mg)
-function alvosMicro(sexo, idade){
+function alvosMicro(sexo, idade, over){
   const f = sexo === 'f';
   const id = Number(idade) || 30;
-  return {
+  const base = {
     fib: f ? (id>50?21:25) : (id>50?30:38),
     fe:  f ? (id>50?8:18) : 8,
     ca:  f ? (id>50?1200:1000) : (id>70?1200:1000),
@@ -1444,6 +1449,14 @@ function alvosMicro(sexo, idade){
     b12: 2.4,
     fol: 400,
   };
+  if(over) Object.keys(over).forEach(k=>{ if(base[k]!==undefined && over[k] && over[k].v>0) base[k] = over[k].v; });
+  return base;
+}
+// modo por nutriente no perfil: 'meta' (padrão), 'max' (limite/teto) ou 'info' (só acompanhar, sem meta nem sugestão)
+function modoMicro(m, over){
+  const o = over && over[m.k];
+  if(o && o.modo) return o.modo;
+  return m.max ? 'max' : 'meta';
 }
 // Soma micros de uma lista de registros; itens sem dados (foto/alimento próprio) contam em `semDados`
 function totaisMicro(list){
@@ -1474,7 +1487,8 @@ function sugestoesMicro(key, falta, alvo){
 function renderMicrosDieta(){
   const el = document.getElementById('dieta-micros');
   if(!el) return;
-  const alvos = alvosMicro(state.perfil.sexo, state.perfil.idade);
+  const over = state.perfil.microAlvos || {};
+  const alvos = alvosMicro(state.perfil.sexo, state.perfil.idade, over);
   const list = state.refeicoes[todayKey()]||[];
   const {tot, semDados} = totaisMicro(list);
   // projeção: registrado hoje + opção selecionada das refeições do plano ainda não feitas
@@ -1497,14 +1511,16 @@ function renderMicrosDieta(){
     const v = tot[m.k], a = alvos[m.k];
     const pct = a ? v/a*100 : 0;
     const pctProj = a ? proj[m.k]/a*100 : 0;
+    const modo = modoMicro(m, over);
     let cls, barCor;
-    if(m.max){ cls = pct>100?'crit':pct>75?'warn':'ok'; }
+    if(modo==='info'){ cls = 'info'; }
+    else if(modo==='max'){ cls = pct>100?'crit':pct>75?'warn':'ok'; }
     else { cls = pct>=90?'ok':pct>=50?'warn':'crit'; }
-    barCor = `var(--${cls==='crit'?'crit':cls==='warn'?'warn':'ok'})`;
+    barCor = cls==='info' ? 'var(--ink-mute)' : `var(--${cls==='crit'?'crit':cls==='warn'?'warn':'ok'})`;
     const fmt = x=> x>=100 ? Math.round(x) : x>=10 ? x.toFixed(0) : x.toFixed(1);
-    return {m, v, a, pct, pctProj, vProj: proj[m.k], cls, barCor, fmt};
+    return {m, modo, v, a, pct, pctProj, vProj: proj[m.k], cls, barCor, fmt};
   });
-  const faltam = linhas.filter(l=>!l.m.max && l.pctProj<90).sort((a,b)=>a.pctProj-b.pctProj);
+  const faltam = linhas.filter(l=>l.modo==='meta' && l.pctProj<90).sort((a,b)=>a.pctProj-b.pctProj);
   const sug = faltam.slice(0,3).map(l=>{
     const s = sugestoesMicro(l.m.k, l.a-l.vProj, l.a);
     if(!s.length) return '';
@@ -1517,13 +1533,13 @@ function renderMicrosDieta(){
   el.innerHTML = `
     <details style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px">
       <summary style="cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.04em;text-transform:uppercase">
-        Micronutrientes <span style="font-weight:400;color:var(--ink-mute);text-transform:none">· ${linhas.filter(l=>!l.m.max&&l.pct>=90).length}/${linhas.filter(l=>!l.m.max).length} no alvo</span>
+        Micronutrientes <span style="font-weight:400;color:var(--ink-mute);text-transform:none">· ${linhas.filter(l=>l.modo==='meta'&&l.pct>=90).length}/${linhas.filter(l=>l.modo==='meta').length} no alvo</span>
       </summary>
       <div style="margin-top:10px">
         ${linhas.map(l=>`
           <div style="margin-bottom:8px">
             <div style="display:flex;justify-content:space-between;font-size:12px">
-              <span>${l.m.n}${l.m.max?' <span style="color:var(--ink-mute)">(máx.)</span>':''}</span>
+              <span>${l.m.n}${l.modo==='max'?' <span style="color:var(--ink-mute)">(máx.)</span>':l.modo==='info'?' <span style="color:var(--ink-mute)">(só acompanhar)</span>':''}</span>
               <span style="font-family:'JetBrains Mono',monospace;color:var(--ink-dim)">${l.fmt(l.v)} / ${l.fmt(l.a)} ${l.m.u} · <span style="color:${l.barCor}">${Math.round(l.pct)}%</span>${nPend?` <span style="color:var(--ink-mute)" title="se seguir o plano do dia">→ ${Math.round(l.pctProj)}%</span>`:''}</span>
             </div>
             <div style="height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:3px">
@@ -4695,8 +4711,42 @@ function renderDieta(){
 }
 
 // --------- perfil ----------
+function renderMicroEditor(){
+  const el = document.getElementById('p-micros-lista');
+  if(!el) return;
+  const over = state.perfil.microAlvos || {};
+  const auto = alvosMicro(state.perfil.sexo, state.perfil.idade);
+  el.innerHTML = MICRO_DEF.map(m=>{
+    const o = over[m.k] || {};
+    const modo = o.modo || (m.max ? 'max' : 'meta');
+    return `<div style="display:grid;grid-template-columns:1.2fr 1fr 1.3fr;gap:6px;align-items:center;margin-bottom:6px;font-size:12px">
+      <span>${m.n} <span style="color:var(--ink-mute)">(${m.u})</span></span>
+      <input type="number" step="any" min="0" data-mk="${m.k}" data-f="v" placeholder="${auto[m.k]}" value="${o.v||''}">
+      <select data-mk="${m.k}" data-f="modo">
+        <option value="meta"${modo==='meta'?' selected':''}>Meta</option>
+        <option value="max"${modo==='max'?' selected':''}>Limite (máx.)</option>
+        <option value="info"${modo==='info'?' selected':''}>Só acompanhar</option>
+      </select></div>`;
+  }).join('');
+}
+function lerMicroEditor(){
+  const out = {};
+  document.querySelectorAll('#p-micros-lista [data-mk]').forEach(inp=>{
+    const k = inp.dataset.mk; out[k] = out[k] || {};
+    if(inp.dataset.f==='v'){ const v = Number(inp.value); if(v>0) out[k].v = v; }
+    else out[k].modo = inp.value;
+  });
+  // guarda só o que difere do padrão
+  Object.keys(out).forEach(k=>{
+    const def = MICRO_DEF.find(m=>m.k===k);
+    const padrao = def && def.max ? 'max' : 'meta';
+    if(!out[k].v && out[k].modo===padrao) delete out[k];
+  });
+  return out;
+}
 function renderPerfil(){
   const p = state.perfil;
+  renderMicroEditor();
   document.getElementById('p-peso').value = p.peso;
   document.getElementById('p-alt').value = p.altura;
   document.getElementById('p-idade').value = p.idade;
@@ -4745,6 +4795,7 @@ document.getElementById('btn-salvar-perfil').addEventListener('click', ()=>{
     atividade: Number(document.getElementById('p-ativ').value),
     objetivo: Number(document.getElementById('p-obj').value),
     aguaMeta: Number(document.getElementById('p-agua').value) || 3000,
+    microAlvos: lerMicroEditor(),
     tema: state.perfil.tema || 'system' // controlado pelo botão de tema rápido no topo, não aqui
   };
   saveState();
