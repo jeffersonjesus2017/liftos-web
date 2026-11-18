@@ -798,6 +798,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     <div class="card">
       <h2>Dieta</h2>
       <div id="dieta-resumo"></div>
+      <div id="dieta-micros"></div>
       <div class="progress-count" id="progress-count">0 de 5 refeições</div>
       <div class="progress-bar" id="progress-bar"></div>
       <h3>Seu plano alimentar</h3>
@@ -1308,6 +1309,196 @@ const FOODS = [
   {id:'cerveja', n:'Cerveja pilsen', kc:42, p:0.3, c:3.6, g:0},
   {id:'vinho_t', n:'Vinho tinto', kc:85, p:0.1, c:2.6, g:0},
 ];
+
+// --------- micronutrientes ----------
+// Valores por 100 g, na mesma preparação do alimento em FOODS. Aproximações (base TACO/USDA).
+// Ordem: [fibra g, ferro mg, cálcio mg, magnésio mg, potássio mg, zinco mg, sódio mg, vit A µg RAE, vit C mg, vit D µg, B12 µg, folato µg]
+const MICRO_DEF = [
+  {k:'fib', n:'Fibra',     u:'g'},
+  {k:'fe',  n:'Ferro',     u:'mg'},
+  {k:'ca',  n:'Cálcio',    u:'mg'},
+  {k:'mg',  n:'Magnésio',  u:'mg'},
+  {k:'k',   n:'Potássio',  u:'mg'},
+  {k:'zn',  n:'Zinco',     u:'mg'},
+  {k:'na',  n:'Sódio',     u:'mg', max:true},
+  {k:'va',  n:'Vitamina A',u:'µg'},
+  {k:'vc',  n:'Vitamina C',u:'mg'},
+  {k:'vd',  n:'Vitamina D',u:'µg'},
+  {k:'b12', n:'Vitamina B12',u:'µg'},
+  {k:'fol', n:'Folato',    u:'µg'},
+];
+const MICROS = {
+  arroz_c:[1.6,0.1,4,11,30,0.5,1,0,0,0,0,3],
+  arroz_i:[2.7,0.3,5,59,75,0.6,1,0,0,0,0,4],
+  feijao_c:[8.5,1.3,27,42,256,0.7,2,0,0,0,0,80],
+  feijao_p:[8.4,1.5,29,45,280,0.8,2,0,0,0,0,85],
+  frango_pe:[0,0.4,5,33,350,0.9,50,6,0,0.1,0.4,6],
+  tilapia:[0,0.6,14,34,380,0.5,52,0,0,3.1,1.9,27],
+  salmao:[0,0.5,12,30,490,0.6,60,15,0,11,3.2,29],
+  atum_f:[0,1.3,10,40,470,0.9,50,20,0,2,5,3],
+  merluza:[0,0.3,20,40,420,0.5,90,20,0,1,1,10],
+  frango_cx:[0,1.1,12,24,270,2.2,90,15,0,0.1,0.4,8],
+  carne_pa:[0,3.1,5,28,330,6.4,60,0,0,0.1,2.5,10],
+  carne_mu:[0,3.1,4,24,270,8,40,0,0,0.1,2.5,8],
+  carne_mu_m:[0,3.1,4,24,270,8,40,0,0,0.1,2.5,8],
+  carne_al:[0,3,5,25,320,6.5,55,0,0,0.2,2.5,8],
+  carne_co:[0,3,4,28,340,6.5,50,0,0,0.1,2.5,8],
+  carne_file:[0,2.6,5,25,340,5.5,55,0,0,0.1,2.2,9],
+  carne_fr:[0,2.5,6,22,280,5.5,55,0,0,0.1,2.2,8],
+  ovo_in:[0,1.3,50,10,126,1,124,150,0,2.1,1.1,44],
+  ovo_mex:[0,1.3,50,10,126,1,124,150,0,2.1,1.1,44],
+  ovo_cl:[0,0.1,7,11,163,0,166,0,0,0,0.1,4],
+  polvilho:[0.2,0.5,10,2,14,0.2,10,0,0,0,0,0],
+  batata_i:[1.3,0.4,4,18,328,0.3,4,0,7,0,0,9],
+  batata_d:[2.2,0.4,17,23,230,0.2,27,500,12,0,0,11],
+  macarrao:[1.5,0.9,8,18,40,0.5,1,0,0,0,0,60],
+  pao_fr:[2.3,1.5,16,25,100,0.9,640,0,0,0,0,60],
+  pao_in:[6,2.4,40,60,190,1.4,450,0,0,0,0,60],
+  pao_fat:[2.5,1.5,60,25,110,0.8,500,0,0,0,0,60],
+  prot_soja:[17,9,350,270,2000,5,20,0,0,0,0,300],
+  farinha_a:[2.4,0.5,10,35,76,0.8,0,0,0,0,0,4],
+  granola:[7,3.5,50,90,330,2.5,40,0,0,0,0,40],
+  melao:[0.9,0.2,9,12,267,0.2,16,40,20,0,0,15],
+  abacaxi:[1,0.3,18,14,130,0.1,1,3,34,0,0,18],
+  morango:[1.7,0.3,11,9,184,0.1,2,1,63,0,0,24],
+  uva:[0.9,0.2,8,7,190,0.1,1,2,3,0,0,2],
+  pera:[3,0.1,9,7,120,0.1,0,1,3,0,0,7],
+  tapioca:[0.4,0.1,10,1,10,0.1,1,0,0,0,0,0],
+  aveia:[9.1,4.4,48,119,336,3.6,5,0,0,0,0,56],
+  leite_in:[0,0.1,120,11,150,0.4,40,45,1,0.1,0.4,5],
+  leite_de:[0,0.1,130,11,165,0.4,50,50,1,0.1,0.4,5],
+  iogurte:[0,0.1,143,14,190,0.6,50,30,1,0,0.4,8],
+  skyr:[0,0.1,120,11,150,0.5,40,5,0,0,0.5,8],
+  kefir:[0,0.1,120,12,150,0.5,40,30,1,0.2,0.4,5],
+  cottage:[0,0.1,83,8,104,0.4,330,36,0,0.1,0.5,12],
+  pasta_am:[8,1.9,49,168,680,2.5,20,0,0,0,0,80],
+  mel:[0,0.4,6,2,52,0.2,4,0,0.5,0,0,2],
+  queijo_m:[0,0.3,579,20,95,2,30,130,0,0.2,0.7,8],
+  queijo_mu:[0,0.3,875,30,100,3,580,200,0,0.3,1.3,10],
+  whey:[0,1,450,70,600,2.5,450,0,0,0,1,0],
+  banana:[2,0.4,8,28,358,0.2,0,3,21,0,0,20],
+  maca:[1.3,0.1,3,4,75,0,1,1,2.4,0,0,3],
+  laranja:[1,0.1,22,10,165,0.1,0,4,53,0,0,30],
+  mamao:[1.8,0.2,22,21,126,0.1,3,45,82,0,0,37],
+  abacate:[6.3,0.2,9,15,206,0.2,2,7,8,0,0,70],
+  brocolis:[3.4,0.5,40,24,250,0.4,5,70,60,0,0,108],
+  alface:[1.8,0.4,38,11,267,0.2,4,100,15,0,0,40],
+  tomate:[1.1,0.2,7,11,222,0.1,1,35,21,0,0,15],
+  cenoura:[3.2,0.2,23,11,315,0.2,3,835,5.9,0,0,19],
+  chuchu:[1,0.1,15,8,100,0.1,2,0,5,0,0,12],
+  abobrinha:[1,0.3,15,18,253,0.3,3,10,5,0,0,24],
+  beterraba:[1.9,0.3,14,20,305,0.4,77,2,3.6,0,0,80],
+  pepino:[1.1,0.2,11,11,150,0.1,1,4,4,0,0,7],
+  azeite:[0,0.4,1,0,1,0,2,0,0,0,0,0],
+  oleo_so:[0,0,0,0,0,0,0,0,0,0,0,0],
+  manteiga:[0,0,15,2,24,0.1,580,684,0,1.5,0.2,3],
+  amendoim:[8,1.9,50,168,580,3.3,5,0,0,0,0,150],
+  castanha:[7.5,2.3,146,365,659,4,3,0,0,0,0,22],
+  arroz_cru:[1.6,0.7,12,20,110,1,3,0,0,0,0,8],
+  cafe_po:[0,0,2,7,49,0,2,0,0,0,0,0],
+  achocolatado:[3,5,150,60,400,2.5,90,150,20,1.5,0.7,60],
+  barra_cereal:[4,2.5,40,50,200,1.2,150,0,0,0,0,30],
+  coxinha:[1.3,1.2,25,18,150,1,450,20,1,0.1,0.2,20],
+  pastel:[1.5,1.6,25,15,150,1.2,450,5,0,0,0.4,20],
+  pizza_m:[1.5,1.5,200,20,190,1.5,600,80,1.5,0.2,0.6,30],
+  xburger:[1.5,2.5,100,20,220,2.5,500,15,1,0.1,1,40],
+  coca:[0,0,2,0,1,0,4,0,0,0,0,0],
+  suco_la:[0.2,0.2,11,11,200,0.1,1,10,40,0,0,30],
+  cerveja:[0,0,4,6,27,0,4,0,0,0,0,6],
+  vinho_t:[0,0.5,8,10,100,0.1,4,0,0,0,0,0],
+};
+// Alvos diários (RDA/AI — DRI/IOM) por sexo e idade; sódio é teto (OMS: 2000 mg)
+function alvosMicro(sexo, idade){
+  const f = sexo === 'f';
+  const id = Number(idade) || 30;
+  return {
+    fib: f ? (id>50?21:25) : (id>50?30:38),
+    fe:  f ? (id>50?8:18) : 8,
+    ca:  f ? (id>50?1200:1000) : (id>70?1200:1000),
+    mg:  f ? (id>30?320:310) : (id>30?420:400),
+    k:   f ? 2600 : 3400,
+    zn:  f ? 8 : 11,
+    na:  2000,
+    va:  f ? 700 : 900,
+    vc:  f ? 75 : 90,
+    vd:  id>70 ? 20 : 15,
+    b12: 2.4,
+    fol: 400,
+  };
+}
+// Soma micros de uma lista de registros; itens sem dados (foto/alimento próprio) contam em `semDados`
+function totaisMicro(list){
+  const tot = {}; MICRO_DEF.forEach(m=>tot[m.k]=0);
+  let semDados = 0;
+  (list||[]).forEach(r=>{
+    const row = r.foodId && MICROS[r.foodId];
+    if(!row){ semDados++; return; }
+    const fator = (r.grams||0)/100;
+    MICRO_DEF.forEach((m,i)=>{ tot[m.k] += row[i]*fator; });
+  });
+  return {tot, semDados};
+}
+// Alimentos que mais ajudam a fechar um nutriente (por %DRI a cada 100 kcal), sem ultraprocessados/bebidas
+const MICRO_EXCLUIR = new Set(['azeite','oleo_so','manteiga','cafe_po','achocolatado','barra_cereal','coxinha','pastel','pizza_m','xburger','coca','cerveja','vinho_t','mel','polvilho','tapioca','farinha_a','arroz_cru','whey','prot_soja']);
+function sugestoesMicro(key, falta, alvo){
+  const idx = MICRO_DEF.findIndex(m=>m.k===key);
+  return FOODS
+    .filter(f=>MICROS[f.id] && !MICRO_EXCLUIR.has(f.id) && f.kc>0 && MICROS[f.id][idx]>0)
+    .map(f=>{
+      const por100 = MICROS[f.id][idx];
+      return {f, dens: (por100/alvo*100)/(f.kc/100), g: Math.round(falta/por100*100)};
+    })
+    .filter(s=>s.g>0 && s.g<=400)
+    .sort((a,b)=>b.dens-a.dens)
+    .slice(0,3);
+}
+function renderMicrosDieta(){
+  const el = document.getElementById('dieta-micros');
+  if(!el) return;
+  const alvos = alvosMicro(state.perfil.sexo, state.perfil.idade);
+  const list = state.refeicoes[todayKey()]||[];
+  const {tot, semDados} = totaisMicro(list);
+  const linhas = MICRO_DEF.map(m=>{
+    const v = tot[m.k], a = alvos[m.k];
+    const pct = a ? v/a*100 : 0;
+    let cls, barCor;
+    if(m.max){ cls = pct>100?'crit':pct>75?'warn':'ok'; }
+    else { cls = pct>=90?'ok':pct>=50?'warn':'crit'; }
+    barCor = `var(--${cls==='crit'?'crit':cls==='warn'?'warn':'ok'})`;
+    const fmt = x=> x>=100 ? Math.round(x) : x>=10 ? x.toFixed(0) : x.toFixed(1);
+    return {m, v, a, pct, cls, barCor, fmt};
+  });
+  const faltam = linhas.filter(l=>!l.m.max && l.pct<90).sort((a,b)=>a.pct-b.pct);
+  const sug = faltam.slice(0,3).map(l=>{
+    const s = sugestoesMicro(l.m.k, l.a-l.v, l.a);
+    if(!s.length) return '';
+    const itens = s.map(x=>{
+      const qtd = x.f.un ? `${Math.max(1,Math.round(x.g/x.f.un))} un` : `${Math.round(x.g/10)*10||x.g} g`;
+      return `${x.f.n.replace(/\s*\(.*?\)/g,'')} (${qtd})`;
+    }).join(' · ');
+    return `<div style="font-size:12px;margin-top:6px"><strong>${l.m.n}:</strong> <span style="color:var(--ink-dim)">${itens}</span></div>`;
+  }).join('');
+  el.innerHTML = `
+    <details style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px">
+      <summary style="cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.04em;text-transform:uppercase">
+        Micronutrientes <span style="font-weight:400;color:var(--ink-mute);text-transform:none">· ${linhas.filter(l=>!l.m.max&&l.pct>=90).length}/${linhas.filter(l=>!l.m.max).length} no alvo</span>
+      </summary>
+      <div style="margin-top:10px">
+        ${linhas.map(l=>`
+          <div style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;font-size:12px">
+              <span>${l.m.n}${l.m.max?' <span style="color:var(--ink-mute)">(máx.)</span>':''}</span>
+              <span style="font-family:'JetBrains Mono',monospace;color:var(--ink-dim)">${l.fmt(l.v)} / ${l.fmt(l.a)} ${l.m.u} · <span style="color:${l.barCor}">${Math.round(l.pct)}%</span></span>
+            </div>
+            <div style="height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:3px">
+              <div style="height:100%;width:${Math.min(100,l.pct)}%;background:${l.barCor}"></div>
+            </div>
+          </div>`).join('')}
+        ${sug ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">Para fechar o alvo</div>${sug}</div>` : (list.length ? '<div style="margin-top:10px;font-size:12px;color:var(--ok)">✓ Alvos principais atingidos hoje</div>' : '')}
+        <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Alvos RDA/AI por sexo e idade do perfil. Valores dos alimentos aproximados (TACO/USDA).${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
+      </div>
+    </details>`;
+}
 
 // --------- state helpers ----------
 // aplica todas as migrações de versão sobre um state bruto (de localStorage OU do Supabase)
@@ -4383,6 +4574,7 @@ function renderResumoKcalDieta(){
 
 function renderDieta(){
   renderResumoKcalDieta();
+  renderMicrosDieta();
   renderProgress();
   renderPlano();
   const k = todayKey();
