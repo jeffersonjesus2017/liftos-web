@@ -4,14 +4,27 @@
 //
 // Regras:
 //  - Só trata GET do próprio site. Supabase, fontes e /api/* passam direto pela rede.
-//  - app.html e app.js: rede primeiro (sempre a versão nova); cache só se estiver offline/lento.
+//  - app.html e /js/*.js: rede primeiro (sempre a versão nova); cache só se estiver offline/lento.
 //  - /vendor, ícones e manifest: cache primeiro (arquivos com versão fixa ou que quase não mudam).
 //  - Para publicar uma nova versão do casco, basta mudar CACHE_VERSION.
 
-const CACHE_VERSION = 'lift-v2';   // suba ao regenerar /taco.json (cache-primeiro)
+const CACHE_VERSION = 'lift-v3';   // suba ao regenerar /taco.json (cache-primeiro) ou ao mudar a lista abaixo
 const SHELL = [
   '/app.html',
-  '/app.js',
+  '/js/01-erros.js',
+  '/js/02-dados.js',
+  '/js/03-micronutrientes.js',
+  '/js/04-estado-sync.js',
+  '/js/05-ui-base.js',
+  '/js/06-agua-semana.js',
+  '/js/07-treino.js',
+  '/js/08-historico-avaliacao.js',
+  '/js/09-saude-metabolica.js',
+  '/js/10-comparacao-graficos.js',
+  '/js/11-dieta.js',
+  '/js/12-refeicao.js',
+  '/js/13-perfil-pdf.js',
+  '/js/14-init.js',
   '/vendor/supabase-js-2.119.1.js',
   '/vendor/jspdf-2.5.1.umd.min.js',
   '/taco.json',
@@ -20,7 +33,7 @@ const SHELL = [
   '/icon-512.png',
   '/favicon.png',
 ];
-const NETWORK_FIRST = new Set(['/app.html', '/app.js']);
+const NETWORK_FIRST = (p) => p === '/app.html' || p.startsWith('/js/');
 const NETWORK_TIMEOUT_MS = 4000;
 
 self.addEventListener('install', (event) => {
@@ -90,7 +103,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (NETWORK_FIRST.has(url.pathname)) {
+  if (NETWORK_FIRST(url.pathname)) {
     event.respondWith(redePrimeiro(req));
   } else if (SHELL.includes(url.pathname) || url.pathname.startsWith('/vendor/') || url.pathname.startsWith('/brand/')) {
     event.respondWith(cachePrimeiro(req));

@@ -1,7 +1,7 @@
 // Origem do Supabase (pública por desenho; a proteção dos dados é o RLS no banco).
 const SUPABASE_HOST = 'xmxdxevrnvmczzlkxqxy.supabase.co';
 
-// CSP do app (/app.html). Sem 'unsafe-inline' em script-src: todo o JS vive em /app.js e nas
+// CSP do app (/app.html). Sem 'unsafe-inline' em script-src: todo o JS vive em /js/*.js e nas
 // bibliotecas em /vendor — um HTML injetado não consegue executar script nem enviar dados
 // para fora (connect-src só permite o próprio site e o Supabase).
 const CSP = [
@@ -22,7 +22,7 @@ const CSP = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // LIFT.OS é hoje um app único (HTML/CSS/JS + localStorage) servido como
-  // arquivos estáticos em /public (app.html + app.js). O Next.js aqui só empacota,
+  // arquivos estáticos em /public (app.html + js/*.js). O Next.js aqui só empacota,
   // hospeda, redireciona e serve a rota /api/analisar-foto — não há renderização React do app ainda.
   async redirects() {
     return [

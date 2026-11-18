@@ -1027,6 +1027,20 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
 </div>
 
 <script src="/vendor/jspdf-2.5.1.umd.min.js"></script>
-<script src="/app.js"></script>
+<!-- scripts clássicos na ordem do nome: compartilham o mesmo escopo global (01-erros primeiro, 14-init por último) -->
+<script src="/js/01-erros.js"></script>
+<script src="/js/02-dados.js"></script>
+<script src="/js/03-micronutrientes.js"></script>
+<script src="/js/04-estado-sync.js"></script>
+<script src="/js/05-ui-base.js"></script>
+<script src="/js/06-agua-semana.js"></script>
+<script src="/js/07-treino.js"></script>
+<script src="/js/08-historico-avaliacao.js"></script>
+<script src="/js/09-saude-metabolica.js"></script>
+<script src="/js/10-comparacao-graficos.js"></script>
+<script src="/js/11-dieta.js"></script>
+<script src="/js/12-refeicao.js"></script>
+<script src="/js/13-perfil-pdf.js"></script>
+<script src="/js/14-init.js"></script>
 </body>
 </html>
