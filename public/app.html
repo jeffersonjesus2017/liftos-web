@@ -1549,7 +1549,7 @@ function renderMicrosDieta(){
     if(!s.length) return '';
     const itens = s.map(x=>{
       const qtd = x.f.un ? `${Math.max(1,Math.round(x.g/x.f.un))} un` : `${Math.round(x.g/10)*10||x.g} g`;
-      return `${x.f.n.replace(/\s*\(.*?\)/g,'')} (${qtd})`;
+      return `${esc(x.f.n.replace(/\s*\(.*?\)/g,''))} (${qtd})`;
     }).join(' · ');
     return `<div style="font-size:12px;margin-top:8px"><strong>${l.m.n}</strong> <span style="color:var(--ink-mute)">(faltam ${l.fmt(Math.max(0,l.a-l.vProj))} ${l.m.u})</span><div style="color:var(--ink-dim);margin-top:2px">${itens}</div></div>`;
   }).join('');
@@ -1561,7 +1561,7 @@ function renderMicrosDieta(){
       <div style="margin-top:10px">
         ${linhas.map(l=>{
           const cs = contribuintes(l.m, l.a);
-          const corpo = cs.length ? cs.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:2px 0;color:var(--ink-dim)"><span>${limpa(c.nome)} <span style="color:var(--ink-mute)">· ${qtdTxt(c.fid,c.g)}${c.plano&&!c.reg?' · plano':''}</span></span><span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${l.fmt(c.val)} ${l.m.u} · ${Math.round(c.val/l.a*100)}%</span></div>`).join('') : '<div style="font-size:11px;color:var(--ink-mute);padding:2px 0">Nenhum alimento com este nutriente no dia</div>';
+          const corpo = cs.length ? cs.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:2px 0;color:var(--ink-dim)"><span>${esc(limpa(c.nome))} <span style="color:var(--ink-mute)">· ${qtdTxt(c.fid,c.g)}${c.plano&&!c.reg?' · plano':''}</span></span><span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${l.fmt(c.val)} ${l.m.u} · ${Math.round(c.val/l.a*100)}%</span></div>`).join('') : '<div style="font-size:11px;color:var(--ink-mute);padding:2px 0">Nenhum alimento com este nutriente no dia</div>';
           return `
           <details style="margin-bottom:8px">
             <summary style="cursor:pointer;list-style:none">
@@ -1812,27 +1812,151 @@ function agendarSync(){
   syncTimer = setTimeout(syncAgora, 1200);
 }
 
+// ---- controle de concorrência (multi-aparelho) ----
+// cloudRev = revisão da linha na nuvem que este aparelho conhece; baseState = cópia do que a nuvem tinha
+// nessa revisão (base do merge de 3 vias). Gravação só passa se a revisão ainda for a mesma;
+// se outro aparelho (ou SQL) alterou a nuvem, busca, faz merge e reenvia — nada é sobrescrito às cegas.
+const LS_BASE_KEY = 'cargabruta.base.v1';
+let cloudRev = null, baseState = null;
+let syncEmAndamento = false, conflitosSeguidos = 0;
+
+function guardarBase(rev, data){
+  cloudRev = rev;
+  baseState = structuredClone(data);
+  try{ localStorage.setItem(LS_BASE_KEY, JSON.stringify({ uid: usuarioAtual && usuarioAtual.id, rev, data })); }catch(e){}
+}
+function lerBase(uid){
+  try{ const b = JSON.parse(localStorage.getItem(LS_BASE_KEY)); return (b && b.uid === uid) ? b : null; }catch(e){ return null; }
+}
+const _jstr = x => JSON.stringify(x);
+const _semUpd = st => _jstr({ ...st, updatedAt: 0, _selectedOpt: undefined });
+
+// listas de itens (por conteúdo): mantém o que a nuvem tem, aplica remoções e adições feitas localmente
+function merge3Lista(l, c, b){
+  l = l || []; c = c || []; b = b || [];
+  const bs = new Set(b.map(_jstr)), ls = new Set(l.map(_jstr));
+  const removidos = new Set(b.filter(x=>!ls.has(_jstr(x))).map(_jstr));
+  const out = c.filter(x=>!removidos.has(_jstr(x)));
+  const tem = new Set(out.map(_jstr));
+  l.forEach(x=>{ const k=_jstr(x); if(!bs.has(k) && !tem.has(k)){ out.push(x); tem.add(k); } });
+  return out;
+}
+// base == null (aparelho ainda sem base): só une as listas (nunca apaga) e escolhe um lado para o resto
+function mergeEstado(local, cloud, base, preferirLocalSemBase){
+  const LISTAS = ['historico','avaliacoes','alimentosCustom'];
+  const DIAS = ['refeicoes','agua'];
+  const out = { ...cloud };
+  const semBase = !base;
+  const bs = base || {};
+  Object.keys({ ...cloud, ...local }).forEach(k=>{
+    if(k === 'updatedAt') return;
+    if(LISTAS.includes(k)){
+      out[k] = merge3Lista(local[k], cloud[k], semBase ? [] : bs[k]);
+    } else if(DIAS.includes(k)){
+      const dias = new Set([...Object.keys(local[k]||{}), ...Object.keys(cloud[k]||{})]);
+      const r = {};
+      dias.forEach(d=>{
+        const m = merge3Lista((local[k]||{})[d], (cloud[k]||{})[d], semBase ? [] : (bs[k]||{})[d]);
+        if(m.length) r[d] = m;
+      });
+      out[k] = r;
+    } else if(semBase){
+      if(preferirLocalSemBase) out[k] = local[k];
+    } else if(_jstr(local[k]) !== _jstr(bs[k])){
+      out[k] = local[k]; // este aparelho alterou: vale o local; senão fica o da nuvem
+    }
+  });
+  out.updatedAt = Date.now();
+  return out;
+}
+
+function rerenderAtual(){
+  const btn = document.querySelector('.tabbar button[aria-current="page"]');
+  const v = btn && btn.dataset.view;
+  try{
+    if(v==='hoje') renderHoje();
+    else if(v==='treino') renderTreino();
+    else if(v==='hist') renderHistorico();
+    else if(v==='dieta') renderDieta();
+    else if(v==='perfil') renderPerfil();
+  }catch(e){ console.error('[rerender]', e); }
+}
+
+async function resolverConflito(){
+  conflitosSeguidos++;
+  logDebug(`conflito #${conflitosSeguidos}: nuvem mudou (rev local=${cloudRev}) — buscando e mesclando`);
+  if(conflitosSeguidos > 5){
+    setSyncStatus('Conflito de sincronização — recarregue o app');
+    throw new Error('conflitos demais seguidos');
+  }
+  const { data: row, error } = await sb.from('app_state').select('data,rev').eq('user_id', usuarioAtual.id).maybeSingle();
+  if(error) throw error;
+  if(!row){
+    // linha não existe mais: recria com o que temos
+    const { data: ins, error: e2 } = await sb.from('app_state').insert({ user_id: usuarioAtual.id, data: state }).select('rev');
+    if(e2) throw e2;
+    guardarBase(ins[0].rev, state);
+    return;
+  }
+  const cloud = aplicarMigracoes(row.data);
+  // rede de segurança: guarda a versão local antes de mesclar (recuperável pelo suporte)
+  try{ localStorage.setItem('cargabruta.premerge', JSON.stringify({ t: Date.now(), local: state })); }catch(e){}
+  state = mergeEstado(state, cloud, baseState, false);
+  guardarBase(row.rev, cloud);
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
+  if(_semUpd(state) !== _semUpd(cloud)){
+    syncPendente = true; // há algo local a enviar sobre a revisão nova
+    clearTimeout(syncTimer); syncTimer = setTimeout(syncAgora, 0);
+  } else {
+    conflitosSeguidos = 0;
+  }
+  rerenderAtual();
+}
+
 async function syncAgora(){
   if(!usuarioAtual || !syncPendente) return;
-  syncPendente = false;
+  if(syncEmAndamento) return; // o finally reagenda se chegou alteração nova
+  syncEmAndamento = true; syncPendente = false;
+  let falhou = false;
   setSyncStatus('Sincronizando…');
-  logDebug(`syncAgora: start | updatedAt=${state.updatedAt} | sessaoAtiva=${!!state.sessaoAtiva}`);
+  logDebug(`syncAgora: start | rev=${cloudRev} | updatedAt=${state.updatedAt} | sessaoAtiva=${!!state.sessaoAtiva}`);
   try{
-    const { error } = await sb.from('app_state').upsert(
-      { user_id: usuarioAtual.id, data: state },
-      { onConflict: 'user_id' }
-    );
+    const enviado = structuredClone(state);
+    const { data: rows, error } = await sb.from('app_state')
+      .update({ data: enviado }).eq('user_id', usuarioAtual.id).eq('rev', cloudRev).select('rev');
     if(error) throw error;
-    setSyncStatus('Sincronizado ✓ ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
-    logDebug('syncAgora: ok');
+    if(!rows || !rows.length){
+      await resolverConflito();
+    } else {
+      conflitosSeguidos = 0;
+      guardarBase(rows[0].rev, enviado);
+      setSyncStatus('Sincronizado ✓ ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
+      logDebug(`syncAgora: ok rev=${rows[0].rev}`);
+    }
   }catch(e){
+    falhou = true;
     console.error('[sync]', e);
     setSyncStatus('Falha ao sincronizar — tentando de novo em breve');
     logDebug(`syncAgora: ERRO ${e && e.message}`);
     syncPendente = true;
     clearTimeout(syncTimer);
     syncTimer = setTimeout(syncAgora, 8000);
+  } finally {
+    syncEmAndamento = false;
+    if(syncPendente && !falhou){ clearTimeout(syncTimer); syncTimer = setTimeout(syncAgora, 300); }
   }
+}
+
+// ao voltar para o app: envia o que está pendente ou busca mudanças feitas em outro aparelho
+async function puxarDaNuvem(){
+  if(!usuarioAtual || syncEmAndamento) return;
+  if(syncPendente){ clearTimeout(syncTimer); await syncAgora(); return; }
+  try{
+    const { data: r, error } = await sb.from('app_state').select('rev').eq('user_id', usuarioAtual.id).maybeSingle();
+    if(error || !r || r.rev === cloudRev) return;
+    conflitosSeguidos = 0;
+    await resolverConflito();
+  }catch(e){ console.error('[puxar]', e); }
 }
 
 function mostrarAuthGate(){
@@ -1851,27 +1975,37 @@ async function onAuthed(user){
   setSyncStatus('Carregando dados…');
   logDebug('onAuthed: chamado');
   try{
-    const { data: row, error } = await sb.from('app_state').select('data').eq('user_id', user.id).maybeSingle();
+    const { data: row, error } = await sb.from('app_state').select('data,rev').eq('user_id', user.id).maybeSingle();
     if(error) throw error;
     const cloud = (row && row.data && Object.keys(row.data).length) ? aplicarMigracoes(row.data) : null;
     const local = loadState();
-    logDebug(`onAuthed: cloud.updatedAt=${cloud?cloud.updatedAt:'null'} local.updatedAt=${local?local.updatedAt:'null'}`);
+    const base = lerBase(user.id);
+    logDebug(`onAuthed: cloud.rev=${row?row.rev:'null'} base.rev=${base?base.rev:'null'} local.updatedAt=${local?local.updatedAt:'null'}`);
+    let enviar = false;
     if(cloud && local){
-      // "mais recente vence": evita que reabrir o app (ex: depois de trocar de app no celular,
-      // que pode recarregar a página antes do debounce de 1200ms sincronizar) apague registros
-      // locais ainda não sincronizados sobrescrevendo com uma versão antiga da nuvem.
-      if((local.updatedAt||0) > (cloud.updatedAt||0)){
-        state = local;
-        logDebug('onAuthed: usou LOCAL (mais recente) e vai re-sincronizar pra nuvem');
-        sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' }).then(({error})=>{
-          if(error) console.error('[onAuthed] re-sync local->nuvem', error);
-        });
+      if(base && base.rev === row.rev){
+        // a nuvem não mudou desde a última sincronização deste aparelho: vale o local (pode ter pendências)
+        state = local; cloudRev = row.rev; baseState = structuredClone(base.data);
+        enviar = _semUpd(local) !== _semUpd(base.data);
+        logDebug('onAuthed: nuvem inalterada — usou LOCAL' + (enviar ? ' (com pendências)' : ''));
+      } else if(base){
+        // a nuvem avançou (outro aparelho/SQL): merge de 3 vias em vez de sobrescrever
+        try{ localStorage.setItem('cargabruta.premerge', JSON.stringify({ t: Date.now(), local })); }catch(e){}
+        state = mergeEstado(local, cloud, base.data, false);
+        guardarBase(row.rev, cloud);
+        enviar = _semUpd(state) !== _semUpd(cloud);
+        logDebug('onAuthed: nuvem avançou — merge local+nuvem');
       } else {
-        state = cloud;
-        logDebug('onAuthed: usou NUVEM (mais recente ou igual)');
+        // primeira vez com controle de revisão neste aparelho: une listas (nunca apaga) e usa o lado mais recente
+        try{ localStorage.setItem('cargabruta.premerge', JSON.stringify({ t: Date.now(), local })); }catch(e){}
+        state = mergeEstado(local, cloud, null, (local.updatedAt||0) > (cloud.updatedAt||0));
+        guardarBase(row.rev, cloud);
+        enviar = _semUpd(state) !== _semUpd(cloud);
+        logDebug('onAuthed: sem base — união de listas');
       }
     } else if(cloud){
       state = cloud;
+      guardarBase(row.rev, cloud);
       logDebug('onAuthed: usou NUVEM (sem cache local)');
     } else {
       // primeiro login nessa conta: migra dados locais (se existirem nesse aparelho) pra nuvem.
@@ -1879,13 +2013,19 @@ async function onAuthed(user){
       // avaliações dele) em vez do defaultState — cada conta começa do zero.
       state = local || structuredClone(ehDonoOriginal() ? defaultState : emptyState);
       logDebug('onAuthed: primeiro login — migrou local (ou default) pra nuvem');
-      await sb.from('app_state').upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' });
+      const { data: ins, error: eIns } = await sb.from('app_state')
+        .upsert({ user_id: user.id, data: state }, { onConflict: 'user_id' }).select('rev');
+      if(eIns) throw eIns;
+      guardarBase(ins[0].rev, state);
     }
     localStorage.setItem(LS_KEY, JSON.stringify(state));
     setSyncStatus('Sincronizado ✓');
+    if(enviar){ agendarSync(); }
   }catch(e){
     console.error('[onAuthed]', e);
     state = loadState() || structuredClone(ehDonoOriginal() ? defaultState : emptyState);
+    const b = lerBase(user.id);
+    if(b){ cloudRev = b.rev; baseState = structuredClone(b.data); }
     setSyncStatus('Offline — usando dados salvos neste aparelho');
   }
   esconderAuthGate();
@@ -1969,8 +2109,11 @@ document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'hidden' && syncPendente){
     clearTimeout(syncTimer);
     syncAgora();
+  } else if(document.visibilityState === 'visible'){
+    puxarDaNuvem();
   }
 });
+window.addEventListener('online', ()=>{ puxarDaNuvem(); });
 window.addEventListener('pagehide', ()=>{
   if(syncPendente){
     clearTimeout(syncTimer);
@@ -1992,6 +2135,11 @@ function todayKey(){
 function fmtDate(iso){
   const d = new Date(iso);
   return d.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'}).toUpperCase();
+}
+
+// escapa texto de usuário/LLM antes de entrar em innerHTML (evita injeção de HTML/atributos)
+function esc(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
 function toast(msg){
@@ -2632,7 +2780,7 @@ function renderSessaoPendente(){
     <div style="background:color-mix(in srgb,var(--accent) 15%,transparent);border:1px solid var(--accent);border-radius:10px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px">
       <div style="flex:1;min-width:0">
         <div style="font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em;font-weight:700">⏵ Sessão em andamento</div>
-        <div style="font-weight:700;font-size:14px;margin-top:2px">${s.nome}</div>
+        <div style="font-weight:700;font-size:14px;margin-top:2px">${esc(s.nome)}</div>
         <div style="font-size:11px;color:var(--ink-mute);font-family:'JetBrains Mono',monospace">Iniciada ${hora} · ${preenchidas}/${total} séries</div>
       </div>
       <button class="primary" style="flex-shrink:0;padding:8px 14px;font-size:12px" onclick="showView('treino')">Continuar</button>
@@ -2705,7 +2853,7 @@ function renderHoje(){
   } else {
     el.innerHTML = `
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-mute);font-weight:700;margin-bottom:4px">Treino de hoje</div>
-      <div style="font-weight:600;font-size:16px;margin-bottom:4px">${info.treino.nome}</div>
+      <div style="font-weight:600;font-size:16px;margin-bottom:4px">${esc(info.treino.nome)}</div>
       <div style="font-size:12px;color:var(--ink-mute);margin-bottom:10px">${info.treino.exercicios.length} exercícios · ${info.treino.exercicios.reduce((s,e)=>s+e.series,0)} séries totais</div>
       <button class="primary" onclick="iniciarSessaoDireta('${info.treino.id}')">Começar agora</button>
     `;
@@ -2761,7 +2909,8 @@ function renderTreino(){
   // select de treinos
   const div = state.divisoes[state.divisaoAtiva];
   const sel = document.getElementById('treino-select');
-  sel.innerHTML = div.treinos.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
+  if(!div){ sel.innerHTML = '<option value="">Nenhum treino cadastrado</option>'; return; }
+  sel.innerHTML = div.treinos.map(t=>`<option value="${t.id}">${esc(t.nome)}</option>`).join('');
   const info = proximoTreinoInfo();
   if(info && info.treino) sel.value = info.treino.id;
   // label dinâmico (sem aviso de concluído hoje — essa info fica só na aba Hoje)
@@ -2838,10 +2987,10 @@ function renderSessaoAtiva(){
     return `
       <div class="ex-item">
         <div class="head">
-          <span class="name">${ex.nome}</span>
+          <span class="name">${esc(ex.nome)}</span>
           <span class="meta">${ex.reps} reps</span>
         </div>
-        ${ex.obs ? `<div class="obs">${ex.obs}</div>` : ''}
+        ${ex.obs ? `<div class="obs">${esc(ex.obs)}</div>` : ''}
         ${metaHtml}
         <div class="sets-grid">
           <div class="hdr">#</div><div class="hdr">Carga (kg)</div><div class="hdr">Reps</div><div></div>
@@ -2994,17 +3143,18 @@ document.getElementById('btn-cancelar-topo').addEventListener('click', cancelarS
 function renderEditorDivisao(){
   const div = state.divisoes[state.divisaoAtiva];
   const el = document.getElementById('editor-divisao');
+  if(!div){ el.innerHTML = '<div class="empty">Nenhuma divisão de treino cadastrada ainda</div>'; return; }
   el.innerHTML = div.treinos.map((t,ti)=>`
     <div class="ex-item">
-      <div class="head"><span class="name">${t.nome}</span></div>
+      <div class="head"><span class="name">${esc(t.nome)}</span></div>
       ${t.exercicios.map((e,ei)=>`
         <div style="padding:8px 0;border-bottom:1px solid var(--line)">
           <div style="display:grid;grid-template-columns:1fr 48px 60px;gap:6px;margin-bottom:4px">
-            <input type="text" value="${e.nome}" data-ti="${ti}" data-ei="${ei}" data-f="nome" style="font-size:13px">
+            <input type="text" value="${esc(e.nome)}" data-ti="${ti}" data-ei="${ei}" data-f="nome" style="font-size:13px">
             <input type="number" value="${e.series}" data-ti="${ti}" data-ei="${ei}" data-f="series" style="text-align:center">
             <input type="text" value="${e.reps}" data-ti="${ti}" data-ei="${ei}" data-f="reps" style="text-align:center">
           </div>
-          <input type="text" value="${e.obs||''}" data-ti="${ti}" data-ei="${ei}" data-f="obs" placeholder="observação (ex: 2s pico, cluster 4/4/4)" style="font-size:12px;font-style:italic;color:var(--ink-dim);margin-bottom:4px">
+          <input type="text" value="${esc(e.obs||'')}" data-ti="${ti}" data-ei="${ei}" data-f="obs" placeholder="observação (ex: 2s pico, cluster 4/4/4)" style="font-size:12px;font-style:italic;color:var(--ink-dim);margin-bottom:4px">
           <input type="number" step="0.5" value="${e.metaCarga||''}" data-ti="${ti}" data-ei="${ei}" data-f="metaCarga" placeholder="meta de carga (kg) — opcional" style="font-size:12px;color:var(--accent)">
         </div>
       `).join('')}
@@ -3078,7 +3228,7 @@ function renderHistTreino(){
       return `
         <div class="food-row" style="align-items:center">
           <div class="nm">
-            <div style="font-weight:600">${h.nome}</div>
+            <div style="font-weight:600">${esc(h.nome)}</div>
             <div style="font-size:11px;color:var(--ink-mute)">${fmtDate(h.data)} · ${h.exercicios.length} exercícios</div>
           </div>
           <div class="kc">${Math.round(vol)} kg</div>
@@ -3599,7 +3749,7 @@ function renderHistCorpo(){
       ${bloco('Circunferências', ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant'])}
       ${renderSaudeMetabolica(ult)}
       ${renderFotosRow(ult)}
-      ${ult.obs?`<div style="margin-top:12px;padding:10px;background:var(--surface-2);border-radius:8px;font-size:13px;color:var(--ink-dim)"><strong>Obs:</strong> ${ult.obs}</div>`:''}
+      ${ult.obs?`<div style="margin-top:12px;padding:10px;background:var(--surface-2);border-radius:8px;font-size:13px;color:var(--ink-dim)"><strong>Obs:</strong> ${esc(ult.obs)}</div>`:''}
       ${resumoFaseHtml ? `
         <button class="ac-ver-mais" id="btn-ver-evolucao-fase" style="margin-top:14px">${_verEvolucaoFase?'Ver menos ▲':'Ver evolução desde o início da fase ▼'}</button>
         <div id="evolucao-fase-wrap" style="display:${_verEvolucaoFase?'block':'none'};margin-top:10px">${resumoFaseHtml}</div>
@@ -4028,7 +4178,7 @@ searchInput.addEventListener('input', ()=>{
   const matches = allFoods().filter(f=>f.n.toLowerCase().includes(q)).slice(0,8);
   if(!matches.length){ resultsBox.hidden = true; return; }
   resultsBox.innerHTML = matches.map(f=>
-    `<button data-fid="${f.id}">${f.n}<span class="kc">${f.kc} kcal</span></button>`
+    `<button data-fid="${f.id}">${esc(f.n)}<span class="kc">${f.kc} kcal</span></button>`
   ).join('');
   resultsBox.hidden = false;
   resultsBox.querySelectorAll('button').forEach(b=>{
@@ -4148,7 +4298,7 @@ function renderFotoResultado(){
     ${_fotoItens.map((it,i)=>`
       <div class="foto-item">
         <button class="rm" data-foto-rm="${i}" title="Remover">×</button>
-        <input type="text" value="${it.nome}" data-foto-field="nome" data-foto-i="${i}">
+        <input type="text" value="${esc(it.nome)}" data-foto-field="nome" data-foto-i="${i}">
         <div class="macros-grid">
           <div><label>Gramas</label><input type="number" value="${Math.round(it.quantidade_g)}" min="0" step="1" data-foto-field="quantidade_g" data-foto-i="${i}"></div>
           <div><label>Kcal</label><input type="number" value="${Math.round(it.kcal)}" min="0" step="1" data-foto-field="kcal" data-foto-i="${i}"></div>
@@ -4165,7 +4315,7 @@ function renderFotoResultado(){
           const c = countRefHoje();
           const prox = state.planoAlimentar.find(m=>!c[m.id]);
           return state.planoAlimentar.map(m =>
-            `<option value="${m.id}"${m.id===(prox&&prox.id)?' selected':''}>${m.nome}${c[m.id]?' ✓':''}</option>`
+            `<option value="${m.id}"${m.id===(prox&&prox.id)?' selected':''}>${esc(m.nome)}${c[m.id]?' ✓':''}</option>`
           ).join('') + '<option value="_avulso">Avulso (sem refeição)</option>';
         })()}
       </select>
@@ -4284,9 +4434,13 @@ async function handleFotoSelecionada(e){
     previewWrap.hidden = false;
     statusEl.textContent = '🔎 Analisando a foto… isso pode levar alguns segundos';
     const base64 = dataUrl.split(',')[1];
+    const { data:{ session: sess } } = await sb.auth.getSession();
     const resp = await fetch('/api/analisar-foto', {
       method: 'POST',
-      headers: {'content-type':'application/json'},
+      headers: {
+        'content-type':'application/json',
+        'authorization': 'Bearer ' + (sess ? sess.access_token : '')
+      },
       body: JSON.stringify({ imageBase64: base64, mediaType: 'image/jpeg' })
     });
     const data = await resp.json().catch(()=>({}));
@@ -4396,7 +4550,7 @@ function renderCustomModal(){
     return `
       <div class="custom-item">
         <div class="info">
-          <div class="nome">${f.n}</div>
+          <div class="nome">${esc(f.n)}</div>
           <div class="kc">${Math.round(ikc)} kcal</div>
         </div>
         <input type="number" value="${it.grams}" step="1" min="1" data-custom-i="${i}">
@@ -4408,7 +4562,7 @@ function renderCustomModal(){
     <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">Edite as gramas, remova ou adicione itens:</div>
     <div class="custom-meal">${itensHtml}</div>
     <div class="custom-add">
-      <input type="text" id="custom-busca" placeholder="buscar alimento..." autocomplete="off" value="${_customSelectedFood ? _customSelectedFood.n : ''}">
+      <input type="text" id="custom-busca" placeholder="buscar alimento..." autocomplete="off" value="${esc(_customSelectedFood ? _customSelectedFood.n : '')}">
       <input type="number" id="custom-qty" value="100" min="1" step="1" placeholder="g">
       <button type="button" id="custom-btn-add" class="rm" style="color:var(--good, #3a8f5a);font-size:20px" title="Adicionar">+</button>
       <div class="custom-results" id="custom-results" hidden></div>
@@ -4450,7 +4604,7 @@ function renderCustomModal(){
     if(q.length < 2){ results.hidden = true; return; }
     const matches = allFoods().filter(f=>f.n.toLowerCase().includes(q)).slice(0,6);
     if(!matches.length){ results.hidden = true; return; }
-    results.innerHTML = matches.map(f=>`<button data-fid="${f.id}">${f.n} — ${f.kc}kcal/100g</button>`).join('');
+    results.innerHTML = matches.map(f=>`<button data-fid="${f.id}">${esc(f.n)} — ${f.kc}kcal/100g</button>`).join('');
     results.hidden = false;
     results.querySelectorAll('button').forEach(b=>{
       b.addEventListener('click', ()=>{
@@ -4563,17 +4717,17 @@ function renderPlano(){
       const ikc = f.kc*factor, ip = f.p*factor, ic = f.c*factor, ig = f.g*factor;
       kc+=ikc; p+=ip; c+=ic; g+=ig;
       const qty = f.un ? `${Math.round(it.g/f.un)} un` : `${it.g}g`;
-      return `<div class="item"><span>${qty} ${f.n}</span><span class="kc">${Math.round(ikc)} kcal</span></div>`;
+      return `<div class="item"><span>${qty} ${esc(f.n)}</span><span class="kc">${Math.round(ikc)} kcal</span></div>`;
     }).join('');
     const btnLabel = info ? 'Adicionar novamente' : 'Adicionar ao diário';
     return `
       <div class="meal ${doneClass}">
         <div class="meal-head">
-          <span class="meal-nome">${meal.nome}${horaChip}${badge}</span>
+          <span class="meal-nome">${esc(meal.nome)}${horaChip}${badge}</span>
           <span class="meal-stats">${Math.round(kc)} kcal · ${Math.round(p)}P ${Math.round(c)}C ${Math.round(g)}G</span>
         </div>
         <div class="meal-opts">
-          ${meal.opcoes.map((o,oi)=>`<button class="opt-chip" aria-pressed="${oi===sel}" data-m="${meal.id}" data-oi="${oi}">${o.nome}</button>`).join('')}
+          ${meal.opcoes.map((o,oi)=>`<button class="opt-chip" aria-pressed="${oi===sel}" data-m="${meal.id}" data-oi="${oi}">${esc(o.nome)}</button>`).join('')}
         </div>
         <div class="meal-items">${itensHtml}</div>
         <div style="display:flex;gap:6px">
@@ -4701,7 +4855,7 @@ function renderDieta(){
     },{kc:0,p:0,c:0,g:0});
     const horaStr = g.hora ? new Date(g.hora).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
     const titulo = g.tipo==='meal'
-      ? `${g.nome}${g.grupo>1?` (${g.grupo}ª vez)`:''}${g.opcao?` · ${g.opcao}`:''}`
+      ? `${esc(g.nome)}${g.grupo>1?` (${g.grupo}ª vez)`:''}${g.opcao?` · ${esc(g.opcao)}`:''}`
       : g.nome;
     const itensHtml = g.items.map(({r,idx})=>{
       const horaItem = g.tipo==='avulso'
@@ -4709,7 +4863,7 @@ function renderDieta(){
         : '';
       return `
         <div class="dg-item">
-          <span class="nome">${Math.round(r.grams)}g ${r.nome}</span>
+          <span class="nome">${Math.round(r.grams)}g ${esc(r.nome)}</span>
           ${horaItem}
           <span class="kc">${Math.round(r.kcal)} kcal</span>
           <button class="rm" data-rm="${idx}" title="Remover">×</button>
