@@ -3137,6 +3137,22 @@ function classificaRCQ(v, sexo){
   return {t:'Risco elevado', c:'var(--crit, #e8371c)'};
 }
 
+// Contexto do IMC conforme %G e sexo (IMC não distingue massa magra de gordura)
+function imcContexto(imc, pctG, sexo){
+  if(imc === null || imc === undefined) return null;
+  const f = sexo === 'f';
+  const limMagro = f ? 25 : 18;   // abaixo disso, IMC alto = massa magra
+  const limMod   = f ? 32 : 25;   // até aqui, %G moderado
+  if(pctG === null || pctG === undefined || isNaN(pctG)){
+    return imc >= 25 ? {cls:'warn', txt:'IMC não separa massa magra de gordura — registre %G em uma avaliação'} : null;
+  }
+  if(imc >= 25 && pctG < limMagro) return {cls:'ok', txt:`✓ IMC elevado por massa magra (${pctG}% gordura)`};
+  if(imc >= 25 && pctG < limMod)   return {cls:'warn', txt:`IMC e %G moderados (${pctG}%) — acompanhar`};
+  if(imc >= 25)                    return {cls:'crit', txt:`IMC e %G elevados (${pctG}%) — atenção`};
+  if(imc < 25 && pctG < (f ? 25 : 15)) return {cls:'ok', txt:'✓ Composição corporal saudável'};
+  return null;
+}
+
 // --------- card integrado de saúde metabólica ----------
 function renderSaudeMetabolica(aval){
   const sexo = state.perfil.sexo || 'm';
@@ -3178,15 +3194,8 @@ function renderSaudeMetabolica(aval){
   // IMC contextualizado
   if(imc){
     const cat = imcCategoria(imc);
-    let nota = '';
-    // Se %G baixo mas IMC alto → é massa magra
-    if(pctG !== null && imc >= 25 && pctG < 18){
-      nota = `<div class="saude-nota ok">✓ IMC elevado por massa magra (${pctG}% gordura)</div>`;
-    } else if(pctG !== null && imc >= 25 && pctG >= 18 && pctG < 25){
-      nota = `<div class="saude-nota warn">IMC e %G moderados — acompanhar</div>`;
-    } else if(pctG !== null && imc < 25 && pctG < 15){
-      nota = `<div class="saude-nota ok">✓ Composição corporal saudável</div>`;
-    }
+    const ctx = imcContexto(imc, pctG, sexo);
+    const nota = ctx ? `<div class="saude-nota ${ctx.cls}">${ctx.txt}</div>` : '';
     items.push(`<div class="saude-item">
       <div class="saude-lbl">IMC</div>
       <div class="saude-val">${imc}</div>
@@ -3235,7 +3244,7 @@ function renderHistCorpo(){
   const list = [...state.avaliacoes].sort((a,b)=>a.data.localeCompare(b.data));
   const el = document.getElementById('aval-destaque');
   if(!list.length){
-    el.innerHTML = '<div class="empty">Nenhuma avaliação registrada ainda. Preencha o formulário abaixo com os dados da próxima consulta.</div>';
+    el.innerHTML = '<div class="empty">Nenhuma avaliação registrada ainda. Preencha o formulário abaixo com os dados da próxima consulta (peso, %G, cintura e quadril).</div>' + renderSaudeMetabolica({});
   } else {
     const ult = list[list.length-1];
     const ant = list.length>1 ? list[list.length-2] : null;
@@ -4487,8 +4496,9 @@ function renderPerfil(){
   // Contexto: se %G da última avaliação é baixo mas IMC alto → massa magra
   const ultAvalG = [...state.avaliacoes].sort((a,b)=>b.data.localeCompare(a.data)).find(a=>a.pctG!=='' && a.pctG!==undefined && a.pctG!==null);
   let imcNota = '';
-  if(ultAvalG && r.imc >= 25 && +ultAvalG.pctG < 18){
-    imcNota = `<div style="font-size:11px;color:var(--ok);margin-top:6px">✓ Elevado por massa magra (${ultAvalG.pctG}% gordura)</div>`;
+  const ctxImc = imcContexto(r.imc, ultAvalG ? +ultAvalG.pctG : null, state.perfil.sexo || 'm');
+  if(ctxImc){
+    imcNota = `<div style="font-size:11px;color:var(--${ctxImc.cls});margin-top:6px">${ctxImc.txt}</div>`;
   }
   document.getElementById('imc-cat').innerHTML = `<span class="pill ${cat.c}">${cat.t}</span>${imcNota}`;
 }
