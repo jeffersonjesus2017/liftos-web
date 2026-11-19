@@ -262,9 +262,13 @@ function renderMicrosDieta(){
   el.innerHTML = `
     <details style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px">
       <summary style="cursor:pointer;font-weight:700;font-size:13px;letter-spacing:0.04em;text-transform:uppercase">
-        Micronutrientes <span style="font-weight:400;color:var(--ink-mute);text-transform:none">· ${linhas.filter(l=>l.modo==='meta'&&l.pct>=90).length}/${linhas.filter(l=>l.modo==='meta').length} no alvo</span>
+        Micronutrientes <span style="font-weight:400;color:var(--ink-mute);text-transform:none">· ${linhas.filter(l=>l.modo==='meta'&&l.pct>=90).length}/${linhas.filter(l=>l.modo==='meta').length} no alvo${nPend?` · ${linhas.filter(l=>l.modo==='meta'&&l.pctProj>=90).length} com o plano`:''}</span>
       </summary>
       <div style="margin-top:10px">
+        <div style="font-size:11px;color:var(--ink-mute);margin-bottom:10px;line-height:1.55">
+          <strong style="color:var(--ink-dim)">%</strong> = quanto você já consumiu hoje da meta diária.
+          <span style="white-space:nowrap"><span style="color:var(--ok)">●</span> 90% ou mais</span> &nbsp;<span style="white-space:nowrap"><span style="color:var(--warn)">●</span> 50–89%</span> &nbsp;<span style="white-space:nowrap"><span style="color:var(--crit)">●</span> abaixo de 50%</span>.${nPend?' A parte clara da barra é o que o plano ainda acrescenta.':''} Em "limite" (sódio), menos é melhor.
+        </div>
         ${linhas.map(l=>{
           const cs = contribuintes(l.m, l.a);
           const corpo = cs.length ? cs.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:2px 0;color:var(--ink-dim)"><span>${esc(limpa(c.nome))} <span style="color:var(--ink-mute)">· ${qtdTxt(c.fid,c.g)}${c.plano&&!c.reg?' · plano':''}</span></span><span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${l.fmt(c.val)} ${l.m.u} · ${Math.round(c.val/l.a*100)}%</span></div>`).join('') : '<div style="font-size:11px;color:var(--ink-mute);padding:2px 0">Nenhum alimento com este nutriente no dia</div>';
@@ -275,18 +279,20 @@ function renderMicrosDieta(){
           return `
           <details style="margin-bottom:8px">
             <summary style="cursor:pointer;list-style:none">
-            <div style="display:flex;justify-content:space-between;font-size:12px">
-              <span>${l.m.n}${lac.length?'*':''}${l.modo==='max'?' <span style="color:var(--ink-mute)">(máx.)</span>':l.modo==='info'?' <span style="color:var(--ink-mute)">(só acompanhar)</span>':''}</span>
-              <span style="font-family:'JetBrains Mono',monospace;color:var(--ink-dim)">${l.fmt(l.v)} / ${l.fmt(l.a)} ${l.m.u} · <span style="color:${l.barCor}">${Math.round(l.pct)}%</span>${nPend?` <span style="color:var(--ink-mute)" title="se seguir o plano do dia">→ ${Math.round(l.pctProj)}%</span>`:''}</span>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px">
+              <span>${l.m.n}${lac.length?'*':''}${l.modo==='max'?' <span style="color:var(--ink-mute)">(limite)</span>':l.modo==='info'?' <span style="color:var(--ink-mute)">(só acompanhar)</span>':''}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:${l.barCor}">${Math.round(l.pct)}%</span>
             </div>
-            <div style="height:5px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:3px">
-              <div style="height:100%;width:${Math.min(100,l.pct)}%;background:${l.barCor}"></div>
+            <div style="position:relative;height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:3px">
+              ${nPend && l.modo!=='info' ? `<div style="position:absolute;left:0;top:0;height:100%;width:${Math.min(100,l.pctProj)}%;background:${l.barCor};opacity:.28"></div>` : ''}
+              <div style="position:absolute;left:0;top:0;height:100%;width:${Math.min(100,l.pct)}%;background:${l.barCor}"></div>
             </div>
+            <div style="font-size:11px;color:var(--ink-mute);margin-top:3px">${l.fmt(l.v)} de ${l.fmt(l.a)} ${l.m.u}${nPend && l.modo!=='info' ? ` · com o plano: <span style="color:var(--ink-dim)">${Math.round(l.pctProj)}%</span>` : ''}${l.modo==='max'?' · menos é melhor':''}</div>
             </summary>
             <div style="margin:6px 0 2px 8px;padding-left:8px;border-left:2px solid var(--line)">${corpo}${aviso}</div>
           </details>`;}).join('')}
         ${sug ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)"><div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">${nPend?'Mesmo seguindo o plano, ainda falta':'Ainda falta para fechar o alvo'}</div>${sug}</div>` : (list.length ? `<div style="margin-top:10px;font-size:12px;color:var(--ok)">✓ ${nPend?'O plano do dia fecha os alvos principais':'Alvos principais atingidos hoje'}</div>` : '')}
-        <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Toque em um nutriente para ver de quais alimentos vem. Alvos RDA/AI por sexo e idade do perfil. Fibra, minerais e vit. A/C vêm da TACO; vit. D, B12 e folato são aproximações (USDA).${nPend?' "→ %" = projeção se seguir o plano (opção selecionada de cada refeição pendente).':''}${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
+        <div style="margin-top:10px;font-size:10px;color:var(--ink-mute)">Toque em um nutriente para ver de quais alimentos vem. Alvos RDA/AI por sexo e idade do perfil. Fibra, minerais e vit. A/C vêm da TACO; vit. D, B12 e folato são aproximações (USDA).${nPend?' "Com o plano" = projeção se seguir a opção selecionada de cada refeição ainda não registrada.':''}${semDados?` ${semDados} ${semDados===1?'item sem':'itens sem'} dados (foto/alimento próprio) não entram na soma.`:''}</div>
       </div>
     </details>`;
 }
