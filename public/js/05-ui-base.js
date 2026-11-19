@@ -236,10 +236,15 @@ function calcPerfil(){
   const get = tmb * p.atividade;
   // meta e macros do dia vêm do plano alimentar real (nutricionista)
   const plano = metaDoPlano();
-  const meta = plano.kcal || Math.round(get + Number(p.objetivo)); // fallback se o plano estiver vazio
-  const protG = plano.kcal ? plano.p : Math.round(p.peso * 2);
-  const gordG = plano.kcal ? plano.g : Math.round(p.peso * 1);
-  const carbG = plano.kcal ? plano.c : Math.max(0, Math.round((meta - (protG*4 + gordG*9))/4));
+  // Meta fixa (campo do Perfil, ex.: total prescrito pela nutricionista) tem prioridade: as opções do plano têm
+  // calorias diferentes entre si, então somar só a 1ª opção faz a meta oscilar conforme a ordem das opções.
+  const fixa = Number(p.metaKcal) > 0 ? Math.round(Number(p.metaKcal)) : 0;
+  const meta = fixa || plano.kcal || Math.round(get + Number(p.objetivo)); // fallback se o plano estiver vazio
+  // macros: proporção do plano, escalada para a meta fixa quando houver
+  const esc_ = fixa && plano.kcal ? fixa / plano.kcal : 1;
+  const protG = plano.kcal ? Math.round(plano.p * esc_) : Math.round(p.peso * 2);
+  const gordG = plano.kcal ? Math.round(plano.g * esc_) : Math.round(p.peso * 1);
+  const carbG = plano.kcal ? Math.round(plano.c * esc_) : Math.max(0, Math.round((meta - (protG*4 + gordG*9))/4));
   const pesoIdeal = Math.round(22.5 * altM * altM);
   return {imc, tmb:Math.round(tmb), get:Math.round(get), meta, protG, gordG, carbG, pesoIdeal};
 }

@@ -41,6 +41,7 @@ function renderPerfil(){
   document.getElementById('p-sexo').value = p.sexo;
   document.getElementById('p-ativ').value = p.atividade;
   document.getElementById('p-obj').value = p.objetivo;
+  document.getElementById('p-meta-kcal').value = Number(p.metaKcal) > 0 ? p.metaKcal : '';
   document.getElementById('p-agua').value = p.aguaMeta || 3000;
   // sugestão de água baseada no peso: 25-50 ml/kg
   const min = Math.round(p.peso * 25 / 50) * 50;
@@ -82,6 +83,7 @@ document.getElementById('btn-salvar-perfil').addEventListener('click', ()=>{
     sexo: document.getElementById('p-sexo').value,
     atividade: Number(document.getElementById('p-ativ').value),
     objetivo: Number(document.getElementById('p-obj').value),
+    metaKcal: Math.max(0, Math.round(Number(document.getElementById('p-meta-kcal').value) || 0)),
     aguaMeta: Number(document.getElementById('p-agua').value) || 3000,
     microAlvos: lerMicroEditor(),
     tema: state.perfil.tema || 'system' // controlado pelo botão de tema rápido no topo, não aqui

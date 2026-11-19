@@ -852,7 +852,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <div style="margin-top:10px">
           <div class="row two">
             <div><label>Nome</label><input type="text" id="cf-nome" placeholder="Ex: Marmita fit"></div>
-            <div><label>Porção (g)</label><input type="number" id="cf-porcao" value="100"></div>
+            <div><label>Porção (g) — a que os valores abaixo se referem</label><input type="number" id="cf-porcao" value="100"></div>
           </div>
           <div class="row three" style="margin-top:8px">
             <div><label>Kcal</label><input type="number" id="cf-kcal" step="0.1"></div>
@@ -903,6 +903,12 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
             <option value="500">Bulk (+500)</option>
             <option value="734" selected>Bulk forte (+734)</option>
           </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Meta de calorias do dia (kcal) — opcional</label>
+          <input type="number" id="p-meta-kcal" step="10" min="0" max="8000" placeholder="vazio = soma da 1ª opção do plano">
+          <div style="font-size:11px;color:var(--ink-mute);margin-top:4px">Use o total prescrito pela nutricionista. Quando preenchido, a meta e os macros do dia usam este valor, e não a soma das opções.</div>
         </div>
       </div>
       <div class="row two" style="margin-top:10px">

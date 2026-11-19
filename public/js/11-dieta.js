@@ -97,9 +97,10 @@ document.getElementById('btn-add-custom').addEventListener('click', ()=>{
   if(un>0) novo.un = un; // peso de 1 unidade (g) — permite lançar "2 unidades" em vez de pesar
   state.alimentosCustom.push(novo);
   saveState();
+  const avisoBaixo = novo.kc < 15;
   ['cf-nome','cf-kcal','cf-p','cf-c','cf-g','cf-un'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cf-porcao').value = 100;
-  toast('Alimento salvo ✓');
+  toast(avisoBaixo ? `⚠ Salvo com só ${novo.kc} kcal/100 g — confira se a porção (g) está certa` : 'Alimento salvo ✓');
 });
 
 // --------- registrar alimento por foto (análise automática via IA) ----------

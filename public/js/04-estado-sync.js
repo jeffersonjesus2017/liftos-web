@@ -137,7 +137,9 @@ function merge3Lista(l, c, b){
   l = l || []; c = c || []; b = b || [];
   const bs = new Set(b.map(_jstr)), ls = new Set(l.map(_jstr));
   const removidos = new Set(b.filter(x=>!ls.has(_jstr(x))).map(_jstr));
-  const out = c.filter(x=>!removidos.has(_jstr(x)));
+  // remove itens apagados localmente e duplicatas idênticas (mesmo JSON) que já estejam na nuvem
+  const vistos = new Set();
+  const out = c.filter(x=>{ const k=_jstr(x); if(removidos.has(k) || vistos.has(k)) return false; vistos.add(k); return true; });
   const tem = new Set(out.map(_jstr));
   l.forEach(x=>{ const k=_jstr(x); if(!bs.has(k) && !tem.has(k)){ out.push(x); tem.add(k); } });
   return out;

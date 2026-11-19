@@ -6,7 +6,7 @@ const emptyState = {
   updatedAt: 0,
   perfil: {
     peso: 0, altura: 0, idade: 0, sexo: 'f',
-    atividade: 1.55, objetivo: 0,
+    atividade: 1.55, objetivo: 0, metaKcal: 0,
     aguaMeta: 2000
   },
   agua: {},

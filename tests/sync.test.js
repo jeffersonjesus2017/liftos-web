@@ -103,3 +103,13 @@ test('chamadas de sync simultâneas geram uma única gravação', async () => {
   await Promise.all([E.raw(), E.raw()]);
   assert.equal(nuvem.row.rev, 2);
 });
+
+test('merge de listas remove duplicatas idênticas já presentes na nuvem (bug das Amêndoas duplicadas)', () => {
+  const { trecho: t } = require('./helpers');
+  const ctx = require('./helpers').rodar('const _jstr=x=>JSON.stringify(x);' + t('function merge3Lista', 'function mergeEstado') + '\nglobalThis.m=merge3Lista;');
+  const x = { id: 'u1', n: 'Amêndoas' }, y = { id: 'u2', n: 'Outro' };
+  const ids = a => a.map(i => i.id);
+  assert.deepEqual(ids(ctx.m([y, x], [y, x, x], [y, x])), ['u2', 'u1']);
+  assert.deepEqual(ids(ctx.m([y, x], [y, x], [y])), ['u2', 'u1'], 'mesmo item novo nos dois lados não duplica');
+  assert.deepEqual(ids(ctx.m([y], [y, x], [y, x])), ['u2'], 'exclusão local continua valendo');
+});
