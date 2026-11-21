@@ -98,7 +98,11 @@ function saveState(){
 // --------- Supabase: auth + sincronização ----------
 const SUPABASE_URL = 'https://xmxdxevrnvmczzlkxqxy.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_CxKPsJr-My_yqWL0S5gQLQ_ixZhPpDj';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Leituras sempre direto da rede (cache: 'no-store'): uma resposta velha reaproveitada pelo navegador/rede faz o app
+// achar que "a nuvem mudou" e descartar o que só existe neste aparelho (bug de 21/11: sessão de treino cancelada).
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  global: { fetch: (url, opts) => fetch(url, { ...(opts || {}), cache: 'no-store' }) }
+});
 let usuarioAtual = null;
 
 function setSyncStatus(txt){
@@ -185,6 +189,30 @@ function rerenderAtual(){
   }catch(e){ console.error('[rerender]', e); }
 }
 
+// A revisão da nuvem só cresce. Se a leitura veio com revisão MENOR que a que este aparelho já conhece, ela é velha
+// (cache/atraso): nunca mesclar com ela, senão o app "desfaz" o que já tinha sincronizado.
+function nuvemDefasada(revNuvem, revConhecida){
+  return revConhecida != null && revNuvem != null && Number(revNuvem) < Number(revConhecida);
+}
+// lê a linha da nuvem; se vier defasada, tenta de novo uma vez e, persistindo, falha (o sync tenta mais tarde, sem tocar no local)
+async function lerLinhaNuvem(){
+  for(let i = 0; i < 2; i++){
+    const { data: row, error } = await sb.from('app_state').select('data,rev').eq('user_id', usuarioAtual.id).maybeSingle();
+    if(error) throw error;
+    if(!row || !nuvemDefasada(row.rev, cloudRev)) return row;
+    logDebug(`leitura defasada: nuvem rev=${row.rev} < conhecida ${cloudRev} (tentativa ${i + 1})`);
+  }
+  throw new Error('leitura da nuvem defasada');
+}
+// guarda o estado local antes de mesclar; não sobrescreve um registro de menos de 10 min (o do início do app é o que importa)
+function guardarPremerge(local){
+  try{
+    const p = JSON.parse(localStorage.getItem('cargabruta.premerge') || 'null');
+    if(p && p.t && Date.now() - p.t < 10 * 60 * 1000) return;
+    localStorage.setItem('cargabruta.premerge', JSON.stringify({ t: Date.now(), local }));
+  }catch(e){}
+}
+
 async function resolverConflito(){
   conflitosSeguidos++;
   logDebug(`conflito #${conflitosSeguidos}: nuvem mudou (rev local=${cloudRev}) — buscando e mesclando`);
@@ -192,8 +220,7 @@ async function resolverConflito(){
     setSyncStatus('Conflito de sincronização — recarregue o app');
     throw new Error('conflitos demais seguidos');
   }
-  const { data: row, error } = await sb.from('app_state').select('data,rev').eq('user_id', usuarioAtual.id).maybeSingle();
-  if(error) throw error;
+  const row = await lerLinhaNuvem();
   if(!row){
     // linha não existe mais: recria com o que temos
     const { data: ins, error: e2 } = await sb.from('app_state').insert({ user_id: usuarioAtual.id, data: state }).select('rev');
@@ -203,7 +230,7 @@ async function resolverConflito(){
   }
   const cloud = aplicarMigracoes(row.data);
   // rede de segurança: guarda a versão local antes de mesclar (recuperável pelo suporte)
-  try{ localStorage.setItem('cargabruta.premerge', JSON.stringify({ t: Date.now(), local: state })); }catch(e){}
+  guardarPremerge(state);
   state = mergeEstado(state, cloud, baseState, false);
   guardarBase(row.rev, cloud);
   try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
@@ -258,6 +285,7 @@ async function puxarDaNuvem(){
   try{
     const { data: r, error } = await sb.from('app_state').select('rev').eq('user_id', usuarioAtual.id).maybeSingle();
     if(error || !r || r.rev === cloudRev) return;
+    if(nuvemDefasada(r.rev, cloudRev)){ logDebug(`puxar: leitura defasada ignorada (nuvem rev=${r.rev} < ${cloudRev})`); return; }
     conflitosSeguidos = 0;
     await resolverConflito();
   }catch(e){ console.error('[puxar]', e); }
@@ -279,22 +307,35 @@ async function onAuthed(user){
   setSyncStatus('Carregando dados…');
   logDebug('onAuthed: chamado');
   try{
-    const { data: row, error } = await sb.from('app_state').select('data,rev').eq('user_id', user.id).maybeSingle();
+    const base = lerBase(user.id);
+    let { data: row, error } = await sb.from('app_state').select('data,rev').eq('user_id', user.id).maybeSingle();
     if(error) throw error;
+    if(row && base && nuvemDefasada(row.rev, base.rev)){
+      logDebug(`onAuthed: leitura defasada (nuvem rev=${row.rev} < base ${base.rev}) — lendo de novo`);
+      const r2 = await sb.from('app_state').select('data,rev').eq('user_id', user.id).maybeSingle();
+      if(r2.error) throw r2.error;
+      row = r2.data;
+    }
     const cloud = (row && row.data && Object.keys(row.data).length) ? aplicarMigracoes(row.data) : null;
     const local = loadState();
-    const base = lerBase(user.id);
     logDebug(`onAuthed: cloud.rev=${row?row.rev:'null'} base.rev=${base?base.rev:'null'} local.updatedAt=${local?local.updatedAt:'null'}`);
     let enviar = false;
     if(cloud && local){
-      if(base && base.rev === row.rev){
+      if(base && nuvemDefasada(row.rev, base.rev)){
+        // continua defasada: não mescla com ela (descartaria o que este aparelho já sincronizou, ex.: treino em andamento).
+        // Mantém o LOCAL e a base conhecida; a gravação só passa se a nuvem realmente estiver nessa revisão.
+        state = local; cloudRev = base.rev; baseState = structuredClone(base.data);
+        enviar = _semUpd(local) !== _semUpd(base.data);
+        logDebug(`onAuthed: nuvem defasada (rev=${row.rev} < ${base.rev}) — manteve LOCAL`);
+        reportarErro('sync', `leitura defasada no boot: nuvem rev=${row.rev} < base ${base.rev}`);
+      } else if(base && base.rev === row.rev){
         // a nuvem não mudou desde a última sincronização deste aparelho: vale o local (pode ter pendências)
         state = local; cloudRev = row.rev; baseState = structuredClone(base.data);
         enviar = _semUpd(local) !== _semUpd(base.data);
         logDebug('onAuthed: nuvem inalterada — usou LOCAL' + (enviar ? ' (com pendências)' : ''));
       } else if(base){
         // a nuvem avançou (outro aparelho/SQL): merge de 3 vias em vez de sobrescrever
-        try{ localStorage.setItem('cargabruta.premerge', JSON.stringify({ t: Date.now(), local })); }catch(e){}
+        try{ localStorage.setItem('cargabruta.premerge', JSON.stringify({ t: Date.now(), local })); }catch(e){}   // aqui sempre sobrescreve: é o estado do início do app
         state = mergeEstado(local, cloud, base.data, false);
         guardarBase(row.rev, cloud);
         enviar = _semUpd(state) !== _semUpd(cloud);

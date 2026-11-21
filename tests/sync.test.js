@@ -34,14 +34,18 @@ function aparelho(nuvem, inicial) {
   const f = new Function('sb', 'localStorage', 'logDebug', 'setSyncStatus', 'aplicarMigracoes', 'LS_KEY', 'document',
     `let state=${JSON.stringify(inicial)}; let usuarioAtual={id:'u1'}; let syncPendente=false, syncTimer=null;
      function renderHoje(){}function renderTreino(){}function renderHistorico(){}function renderDieta(){}function renderPerfil(){}
+     function reportarErro(){}
      ${code}
      return {get state(){return state}, set state(v){state=v},
        sync:async()=>{syncPendente=true;await syncAgora();let n=0;while(syncPendente&&n++<6){await syncAgora();}},
-       pull:puxarDaNuvem, raw:syncAgora, guardarBase, mergeEstado,
+       pull:puxarDaNuvem, raw:syncAgora, guardarBase, mergeEstado, nuvemDefasada, guardarPremerge,
+       get pendente(){return syncPendente},
        get rev(){return cloudRev}, set pend(v){syncPendente=v}};`);
   const ls = {};
   const localStorage = { getItem: k => ls[k] ?? null, setItem: (k, v) => { ls[k] = v; } };
-  return f(sbFalso(nuvem), localStorage, () => {}, () => {}, x => x, 'k', { querySelector: () => null });
+  const ap = f(sbFalso(nuvem), localStorage, () => {}, () => {}, x => x, 'k', { querySelector: () => null });
+  ap.ls = () => ls;
+  return ap;
 }
 
 const J = x => JSON.parse(JSON.stringify(x));
@@ -112,4 +116,43 @@ test('merge de listas remove duplicatas idênticas já presentes na nuvem (bug d
   assert.deepEqual(ids(ctx.m([y, x], [y, x, x], [y, x])), ['u2', 'u1']);
   assert.deepEqual(ids(ctx.m([y, x], [y, x], [y])), ['u2', 'u1'], 'mesmo item novo nos dois lados não duplica');
   assert.deepEqual(ids(ctx.m([y], [y, x], [y, x])), ['u2'], 'exclusão local continua valendo');
+});
+
+// ---- bug real de 21/11: leitura velha da nuvem (rev 78 < 89) descartava o treino em andamento ----
+const comSessao = () => ({ ...J(base0), sessaoAtiva: { nome: 'DOMINGO', data: '2026-11-21T11:13:00Z', exercicios: [{ id: 'j28', sets: [{ reps: '10', carga: '40' }] }] } });
+
+test('nuvemDefasada: só é defasada se a revisão lida for MENOR que a conhecida', () => {
+  const A = aparelho(novaNuvem(), base0);
+  assert.equal(A.nuvemDefasada(78, 89), true);
+  assert.equal(A.nuvemDefasada(89, 89), false);
+  assert.equal(A.nuvemDefasada(90, 89), false);
+  assert.equal(A.nuvemDefasada(5, null), false);
+});
+
+test('pull com leitura defasada da nuvem é ignorado e não derruba a sessão de treino', async () => {
+  const nuvem = novaNuvem(); nuvem.row.data = J(base0); nuvem.row.rev = 78;       // leitura velha (sem sessão)
+  const A = aparelho(nuvem, comSessao()); A.guardarBase(89, comSessao());          // aparelho já estava no rev 89
+  await A.pull();
+  assert.ok(A.state.sessaoAtiva, 'sessão de treino deve continuar');
+  assert.equal(A.rev, 89);
+});
+
+test('conflito com leitura defasada não mescla: mantém o local e tenta de novo depois', async () => {
+  const nuvem = novaNuvem(); nuvem.row.data = J(base0); nuvem.row.rev = 78;
+  const A = aparelho(nuvem, comSessao()); A.guardarBase(89, comSessao());
+  A.state.refeicoes['2026-11-18'].push({ hora: 't9', nome: 'banana' });
+  await A.raw.call(null, A.pend = true);                                           // update com rev 89 não casa → resolverConflito
+  assert.ok(A.state.sessaoAtiva, 'sessão de treino deve continuar');
+  assert.equal(A.state.refeicoes['2026-11-18'].length, 2);
+  assert.equal(A.pendente, true, 'deve reagendar o envio');
+  assert.equal(nuvem.row.rev, 78, 'nuvem intocada');
+});
+
+test('registro pré-merge recente não é sobrescrito (guarda o estado do início do app)', () => {
+  const nuvem = novaNuvem();
+  const A = aparelho(nuvem, base0);
+  A.guardarPremerge({ marca: 'primeiro' });
+  A.guardarPremerge({ marca: 'segundo' });
+  const ls = A.ls();
+  assert.equal(JSON.parse(ls['cargabruta.premerge']).local.marca, 'primeiro');
 });
