@@ -282,8 +282,8 @@ function renderMicrosDieta(){
           const corpo = cs.length ? cs.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:2px 0;color:var(--ink-dim)"><span>${esc(limpa(c.nome))} <span style="color:var(--ink-mute)">· ${qtdTxt(c.fid,c.g)}${c.plano&&!c.reg?' · plano':''}</span></span><span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${l.fmt(c.val)} ${l.m.u} · ${Math.round(c.val/l.a*100)}%</span></div>`).join('') : '<div style="font-size:11px;color:var(--ink-mute);padding:2px 0">Nenhum alimento com este nutriente no dia</div>';
           // alimentos do dia sem dado deste nutriente (ex.: TACO não traz vit. D, B12 e folato)
           const idxN = MICRO_DEF.findIndex(x=>x.k===l.m.k), vistosN = new Set(), lac = [];
-          itensDia.forEach(it=>{ const rw = microRow(it.foodId); if(rw && rw[idxN]==null && !vistosN.has(it.foodId)){ vistosN.add(it.foodId); lac.push(limpa(it.nome)); } });
-          const aviso = lac.length ? `<div style="font-size:11px;color:var(--warn);padding:4px 0 2px">⚠ Sem dado de ${l.m.n} na TACO para: ${esc(lac.slice(0,6).join(', '))}${lac.length>6?` e mais ${lac.length-6}`:''}. O total pode estar subestimado.</div>` : '';
+          itensDia.forEach(it=>{ const rw = microRow(it.foodId); if(rw && rw[idxN]==null && !vistosN.has(it.foodId)){ vistosN.add(it.foodId); lac.push(limpa(it.nome) + (String(it.foodId).startsWith('taco_') ? ' (TACO)' : (state.alimentosCustom||[]).some(f=>f.id===it.foodId) ? ' (próprio)' : '')); } });
+          const aviso = lac.length ? `<div style="font-size:11px;color:var(--warn);padding:4px 0 2px">⚠ Sem dado de ${l.m.n} para: ${esc(lac.slice(0,6).join(', '))}${lac.length>6?` e mais ${lac.length-6}`:''}. O total pode estar subestimado.</div>` : '';
           return `
           <details style="margin-bottom:8px">
             <summary style="cursor:pointer;list-style:none">

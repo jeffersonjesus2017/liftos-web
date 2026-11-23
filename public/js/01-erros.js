@@ -7,7 +7,7 @@
 // Captura erros do app (e violações de CSP) e grava em public.client_errors via Supabase.
 // Sem serviço externo; sem dados pessoais (só mensagem, rota e navegador). A tabela só aceita INSERT
 // do próprio usuário, limita 100/hora e apaga o que tem mais de 30 dias. Leitura: painel/SQL do dono.
-const APP_BUILD = '2026-11-23.2';
+const APP_BUILD = '2026-11-23.3';
 const _errFila = [];
 const _errVistos = new Set();
 let _errTotal = 0;
