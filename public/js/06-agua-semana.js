@@ -7,18 +7,46 @@ function totalAguaHoje(){
   return todayAgua().reduce((a,b)=>a+b.ml,0);
 }
 
-// gera 6 slots de hidratação distribuídos entre 5h e 17h30 (acordo 5h, corte após 18h pra proteger o sono)
-function planoHidratacao(){
-  const meta = state.perfil.aguaMeta || 3000;
+// rótulo de uma hora decimal (7.5 -> "7:30", 5 -> "5h")
+function rotuloHoraAgua(h){
+  const hInt = Math.floor(h);
+  const min = Math.round((h - hInt) * 60);
+  return min > 0 ? `${hInt}:${String(min).padStart(2,'0')}` : `${hInt}h`;
+}
+// plano padrão: 6 slots entre 5h e 17h30 (acordo 5h, corte após 18h pra proteger o sono), meta dividida igualmente
+function planoHidratacaoPadrao(meta){
   const nSlots = 6;
   const porSlot = Math.round(meta / nSlots / 50) * 50; // arredonda pra 50ml
   // horas decimais pra permitir 7.5 = 7h30
   const horas = [5, 7.5, 10, 12.5, 15, 17.5];
-  return horas.map(h=>{
-    const hInt = Math.floor(h);
-    const min = (h - hInt) * 60;
-    const label = min > 0 ? `${hInt}:${String(min).padStart(2,'0')}` : `${hInt}h`;
-    return {hora:h, ml:porSlot, label};
+  return horas.map(h => ({hora:h, ml:porSlot, label:rotuloHoraAgua(h)}));
+}
+// valida o plano salvo pelo usuário (state.planoAgua = [{hora, ml}]); devolve a lista limpa e ordenada por hora, ou null
+function planoAguaValido(lista){
+  if(!Array.isArray(lista) || !lista.length) return null;
+  const out = [];
+  for(const s of lista){
+    const hora = Number(s && s.hora), ml = Math.round(Number(s && s.ml));
+    if(!(hora >= 0 && hora < 24) || !(ml >= 50 && ml <= 3000)) return null;
+    out.push({hora: Math.round(hora * 60) / 60, ml});
+  }
+  out.sort((a,b) => a.hora - b.hora);
+  return out;
+}
+// plano em uso: o editado pelo usuário, se houver; senão o padrão calculado a partir da meta
+function planoHidratacao(){
+  const custom = planoAguaValido(state.planoAgua);
+  if(custom) return custom.map(s => ({...s, label:rotuloHoraAgua(s.hora)}));
+  return planoHidratacaoPadrao(state.perfil.aguaMeta || 3000);
+}
+// ao mudar o plano, os registros do dia ligados a um slot seguem o slot de mesma hora; se o horário sumiu, viram avulsos (os ml continuam contando)
+function remapearSlotsAgua(registros, planoAntigo, planoNovo){
+  return registros.map(r => {
+    if(r.slot === undefined) return r;
+    const velho = planoAntigo[r.slot];
+    const novoIdx = velho ? planoNovo.findIndex(s => Math.abs(s.hora - velho.hora) < 1/120) : -1;
+    const {slot, ...resto} = r;
+    return novoIdx >= 0 ? {...resto, slot:novoIdx} : resto;
   });
 }
 
@@ -132,6 +160,84 @@ document.getElementById('btn-agua-undo').addEventListener('click', ()=>{
   renderAgua();
   toast(`−${removido.ml}ml`);
 });
+
+// ---- editar plano de hidratação (horários e ml de cada slot) ----
+function horaAguaParaInput(h){
+  const t = Math.round(h * 60);
+  return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+}
+function horaAguaDoInput(v){
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v || '');
+  return m ? (+m[1] + (+m[2])/60) : NaN;
+}
+function linhaPlanoAguaHtml(s){
+  return `<div class="agm-row">
+    <input type="time" class="agm-hora" value="${horaAguaParaInput(s.hora)}">
+    <input type="number" class="agm-ml" value="${s.ml}" min="50" max="3000" step="50" inputmode="numeric"><span class="agm-un">ml</span>
+    <button type="button" class="ghost agm-rm" aria-label="Remover horário">✕</button>
+  </div>`;
+}
+function lerLinhasPlanoAgua(){
+  return [...document.querySelectorAll('#agm-lista .agm-row')].map(row => ({
+    hora: horaAguaDoInput(row.querySelector('.agm-hora').value),
+    ml: Number(row.querySelector('.agm-ml').value)
+  }));
+}
+function atualizarTotalPlanoAgua(){
+  const tot = lerLinhasPlanoAgua().reduce((a,s) => a + (s.ml > 0 ? s.ml : 0), 0);
+  document.getElementById('agm-total').textContent = `Total do dia: ${tot} ml`;
+}
+function abrirEditorPlanoAgua(){
+  document.getElementById('agm-lista').innerHTML = planoHidratacao().map(linhaPlanoAguaHtml).join('');
+  atualizarTotalPlanoAgua();
+  document.getElementById('agua-modal-backdrop').classList.add('show');
+}
+function fecharEditorPlanoAgua(){
+  document.getElementById('agua-modal-backdrop').classList.remove('show');
+}
+function salvarPlanoAgua(){
+  const novo = planoAguaValido(lerLinhasPlanoAgua());
+  if(!novo){ toast('Confira os horários e as quantidades (50 a 3000 ml cada)'); return; }
+  const antigo = planoHidratacao();
+  const k = todayKey();
+  if(state.agua[k]) state.agua[k] = remapearSlotsAgua(state.agua[k], antigo, novo);
+  state.planoAgua = novo;
+  state.perfil.aguaMeta = novo.reduce((a,s) => a + s.ml, 0); // a meta do dia passa a ser a soma do plano
+  saveState();
+  fecharEditorPlanoAgua();
+  renderAgua();
+  toast(`Plano salvo · meta ${state.perfil.aguaMeta} ml`);
+}
+(()=>{
+  const lista = document.getElementById('agm-lista');
+  if(!lista) return;
+  lista.addEventListener('input', atualizarTotalPlanoAgua);
+  lista.addEventListener('click', e => {
+    const b = e.target.closest('.agm-rm');
+    if(!b) return;
+    b.closest('.agm-row').remove();
+    atualizarTotalPlanoAgua();
+  });
+  document.getElementById('btn-agua-edit').addEventListener('click', abrirEditorPlanoAgua);
+  document.getElementById('agm-add').addEventListener('click', () => {
+    const atuais = lerLinhasPlanoAgua();
+    const ult = atuais.length ? atuais[atuais.length - 1] : {hora:12, ml:500};
+    const h = Number.isFinite(ult.hora) ? Math.min(23.5, ult.hora + 1) : 12;
+    lista.insertAdjacentHTML('beforeend', linhaPlanoAguaHtml({hora:h, ml: ult.ml > 0 ? ult.ml : 500}));
+    atualizarTotalPlanoAgua();
+  });
+  document.getElementById('agm-reset').addEventListener('click', () => {
+    // volta ao padrão para a meta atual (só vale ao confirmar)
+    lista.innerHTML = planoHidratacaoPadrao(state.perfil.aguaMeta || 3000).map(linhaPlanoAguaHtml).join('');
+    atualizarTotalPlanoAgua();
+  });
+  document.getElementById('agm-cancel').addEventListener('click', fecharEditorPlanoAgua);
+  document.getElementById('agm-ok').addEventListener('click', salvarPlanoAgua);
+  document.getElementById('agua-modal-backdrop').addEventListener('click', e => { if(e.target.id === 'agua-modal-backdrop') fecharEditorPlanoAgua(); });
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape' && document.getElementById('agua-modal-backdrop').classList.contains('show')) fecharEditorPlanoAgua();
+  });
+})();
 
 // --------- semana de treino ----------
 function inicioSemana(){

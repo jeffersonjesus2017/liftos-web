@@ -332,6 +332,12 @@ svg.chart .axis{stroke:var(--line);stroke-width:1}
 .modal .actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .modal .actions button{min-width:90px}
 .modal input[type="text"],.modal input[type="number"]{width:100%;margin-top:10px}
+.agm-row{display:flex;gap:8px;align-items:center;margin-top:8px}
+.agm-row .agm-hora{flex:1 1 40%;min-width:0}
+.agm-row .agm-ml{flex:1 1 40%;min-width:0;margin-top:0;width:auto}
+.agm-row .agm-un{font-size:12px;color:var(--ink-mute)}
+.agm-row .agm-rm{padding:6px 10px}
+#agm-lista{max-height:50vh;overflow-y:auto}
 
 details summary{cursor:pointer;font-weight:600;font-size:13px;padding:6px 0}
 details summary::marker{color:var(--accent)}
@@ -579,6 +585,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <button class="primary" id="btn-agua-custom">Adicionar</button>
       </div>
       <div style="text-align:right;margin-top:10px">
+        <button class="ghost" id="btn-agua-edit">editar plano</button>
         <button class="ghost" id="btn-agua-undo">desfazer último</button>
       </div>
     </div>
@@ -1021,6 +1028,23 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
     <div class="actions">
       <button class="secondary" id="exm-cancel">Cancelar</button>
       <button class="primary" id="exm-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="agua-modal-backdrop" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h3>Plano de hidratação</h3>
+    <div class="msg">Ajuste o horário e os ml de cada copo. A meta do dia passa a ser a soma.</div>
+    <div id="agm-lista"></div>
+    <div class="meal-stats" id="agm-total" style="display:block;margin:8px 0"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="secondary" id="agm-add" type="button">+ Horário</button>
+      <button class="ghost" id="agm-reset" type="button">Voltar ao padrão</button>
+    </div>
+    <div class="actions">
+      <button class="secondary" id="agm-cancel">Cancelar</button>
+      <button class="primary" id="agm-ok">Salvar</button>
     </div>
   </div>
 </div>

@@ -78,6 +78,7 @@ document.getElementById('btn-salvar-perfil').addEventListener('click', ()=>{
   if(!(peso >= 30 && peso <= 300)){ toast('Peso inválido (30-300 kg)'); return; }
   if(!(altura >= 100 && altura <= 250)){ toast('Altura inválida (100-250 cm)'); return; }
   if(!(idade >= 10 && idade <= 120)){ toast('Idade inválida (10-120 anos)'); return; }
+  const aguaAnterior = state.perfil.aguaMeta;
   state.perfil = {
     peso, altura, idade,
     sexo: document.getElementById('p-sexo').value,
@@ -88,6 +89,8 @@ document.getElementById('btn-salvar-perfil').addEventListener('click', ()=>{
     microAlvos: lerMicroEditor(),
     tema: state.perfil.tema || 'system' // controlado pelo botão de tema rápido no topo, não aqui
   };
+  // mudou a meta de água no Perfil: o plano volta a ser calculado a partir dela (descarta horários/ml editados)
+  if(state.perfil.aguaMeta !== aguaAnterior) state.planoAgua = null;
   saveState();
   aplicarTema();
   renderPerfil();
