@@ -133,9 +133,17 @@ async function carregarTaco(){
     rerenderAtual();   // registros com alimentos TACO passam a ter micronutrientes
   }catch(e){ console.error('[taco]', e); reportarErro('error', 'falha ao carregar taco.json: ' + (e && e.message)); }
 }
+// Alimento próprio com micros digitados do rótulo: food.m = {fib, na, ...} por 100 g (chaves de MICRO_DEF; ausente = sem dado)
+function microRowCustom(fid){
+  const lista = (typeof state !== 'undefined' && state && state.alimentosCustom) || [];
+  const f = lista.find(x=>x.id === fid);
+  if(!f || !f.m || typeof f.m !== 'object') return null;
+  const row = MICRO_DEF.map(d=>{ const v = f.m[d.k]; return (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v); });
+  return row.some(v=>v !== null) ? row : null;
+}
 function microRow(fid){
   if(!fid) return null;
-  return MICROS[fid] || MICROS_EXTRA[fid] || (MICRO_ALIAS[fid] && MICROS[MICRO_ALIAS[fid]]) || TACO_MICROS[fid] || null;
+  return MICROS[fid] || MICROS_EXTRA[fid] || (MICRO_ALIAS[fid] && MICROS[MICRO_ALIAS[fid]]) || TACO_MICROS[fid] || microRowCustom(fid) || null;
 }
 // Alvos diários (RDA/AI — DRI/IOM) por sexo e idade; sódio é teto (OMS: 2000 mg)
 function alvosMicro(sexo, idade, over){

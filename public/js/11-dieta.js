@@ -95,10 +95,17 @@ document.getElementById('btn-add-custom').addEventListener('click', ()=>{
     kc: Math.round(kcal/f), p:+(p/f).toFixed(1), c:+(c/f).toFixed(1), g:+(g/f).toFixed(1)
   };
   if(un>0) novo.un = un; // peso de 1 unidade (g) — permite lançar "2 unidades" em vez de pesar
+  // micros opcionais do rótulo (mesma porção dos demais valores), guardados por 100 g em novo.m
+  const m = {};
+  [['fib','cf-fib'],['na','cf-na']].forEach(([k,id])=>{
+    const txt = document.getElementById(id).value.trim();
+    if(txt !== '' && Number(txt) >= 0) m[k] = +(Number(txt)/f).toFixed(1);
+  });
+  if(Object.keys(m).length) novo.m = m;
   state.alimentosCustom.push(novo);
   saveState();
   const avisoBaixo = novo.kc < 15;
-  ['cf-nome','cf-kcal','cf-p','cf-c','cf-g','cf-un'].forEach(id=>document.getElementById(id).value='');
+  ['cf-nome','cf-kcal','cf-p','cf-c','cf-g','cf-un','cf-fib','cf-na'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cf-porcao').value = 100;
   toast(avisoBaixo ? `⚠ Salvo com só ${novo.kc} kcal/100 g — confira se a porção (g) está certa` : 'Alimento salvo ✓');
 });

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { foods, trecho, rodar } = require('./helpers');
 
 const codigo = foods() + '\n' + trecho('// --------- micronutrientes', '// --------- state helpers') +
-  '\nglobalThis.__api = { alvosMicro, modoMicro, totaisMicro, sugestoesMicro, microRow, MICRO_DEF, MICROS, FOODS };';
+  '\nglobalThis.__api = { alvosMicro, modoMicro, totaisMicro, sugestoesMicro, microRow, microRowCustom, MICRO_DEF, MICROS, FOODS };';
 const ctx = rodar(codigo, {
   document: { getElementById: () => null }, esc: v => String(v), allFoods: () => [],
   state: { perfil: {}, refeicoes: {} }, todayKey: () => 'd', countRefHoje: () => ({}),
@@ -77,4 +77,18 @@ test('cobertura: todo alimento do cardápio base tem micros (ou alias)', () => {
   const sem = api.FOODS.filter(f => !api.microRow(f.id)).map(f => f.id);
   // Limite conhecido; o passo 4c (TACO completa) deve reduzir isto
   assert.ok(sem.length <= 30, `muitos alimentos sem micros (${sem.length}): ${sem.join(', ')}`);
+});
+
+test('alimento próprio com micros do rótulo (m) entra nos totais; o que não foi informado fica "sem dado"', () => {
+  ctx.state.alimentosCustom = [{ id: 'u_teste', n: 'Pão X', kc: 261, p: 12, c: 41, g: 5.4, un: 25, m: { fib: 6.2, na: 326 } }];
+  const row = api.microRow('u_teste');
+  const iFib = api.MICRO_DEF.findIndex(m => m.k === 'fib'), iNa = api.MICRO_DEF.findIndex(m => m.k === 'na'), iFe = api.MICRO_DEF.findIndex(m => m.k === 'fe');
+  assert.equal(row[iFib], 6.2); assert.equal(row[iNa], 326); assert.equal(row[iFe], null);
+  const { tot, semDados } = api.totaisMicro([{ foodId: 'u_teste', grams: 50 }]);
+  assert.ok(Math.abs(tot.fib - 3.1) < 1e-9); assert.ok(Math.abs(tot.na - 163) < 1e-9);
+  assert.equal(tot.fe, 0); assert.equal(semDados, 0);
+  // sem m, ou m vazio/lixo → sem linha de micros
+  ctx.state.alimentosCustom = [{ id: 'u_a', kc: 1 }, { id: 'u_b', kc: 1, m: {} }, { id: 'u_c', kc: 1, m: { fib: 'x' } }];
+  ['u_a', 'u_b', 'u_c'].forEach(id => assert.equal(api.microRow(id), null));
+  ctx.state.alimentosCustom = [];
 });
