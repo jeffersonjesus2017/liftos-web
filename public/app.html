@@ -722,7 +722,11 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <div class="aval-list" id="tab-aval"></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="aval-nova-wrap">
+        <button class="primary" id="btn-nova-aval" style="width:100%">+ Nova avaliação</button>
+      </div>
+
+      <div class="card" id="aval-form-card" hidden>
         <h3 id="aval-form-title">Nova avaliação</h3>
         <div class="body-form">
           <div><label>Data</label><input type="date" id="av-data"></div>
@@ -775,7 +779,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="primary" id="btn-salvar-aval">Salvar avaliação</button>
           <button class="secondary" id="btn-limpar-aval">Limpar</button>
-          <button class="secondary" id="btn-cancelar-edit" hidden>Cancelar edição</button>
+          <button class="secondary" id="btn-cancelar-edit">Cancelar</button>
         </div>
       </div>
     </div>

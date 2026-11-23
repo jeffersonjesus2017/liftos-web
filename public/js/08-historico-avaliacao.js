@@ -249,7 +249,7 @@ function iniciarEdicaoAval(data){
   _editingAvalDate = data;
   document.getElementById('aval-form-title').textContent = 'Editando avaliação de ' + new Date(data+'T12:00:00').toLocaleDateString('pt-BR');
   document.getElementById('btn-salvar-aval').textContent = 'Atualizar avaliação';
-  document.getElementById('btn-cancelar-edit').hidden = false;
+  abrirFormAval();
   // preencher campos
   document.getElementById('av-data').value = a.data;
   const setVal = (id, k)=>{ const el = document.getElementById(id); if(el) el.value = (a[k]!==undefined && a[k]!=='') ? a[k] : ''; };
@@ -267,14 +267,27 @@ function iniciarEdicaoAval(data){
   // scroll até o form
   document.getElementById('aval-form-title').scrollIntoView({behavior:'smooth', block:'start'});
 }
+// formulário de avaliação fica fechado; abre pelo botão "+ Nova avaliação" ou ao editar uma existente
+function abrirFormAval(){
+  document.getElementById('aval-form-card').hidden = false;
+  document.getElementById('aval-nova-wrap').hidden = true;
+}
+function fecharFormAval(){
+  document.getElementById('aval-form-card').hidden = true;
+  document.getElementById('aval-nova-wrap').hidden = false;
+}
+document.getElementById('btn-nova-aval').addEventListener('click', ()=>{
+  abrirFormAval();
+  document.getElementById('aval-form-title').scrollIntoView({behavior:'smooth', block:'start'});
+});
 function sairEdicao(){
   _editingAvalDate = null;
   _tempFotos = {};
   document.getElementById('aval-form-title').textContent = 'Nova avaliação';
   document.getElementById('btn-salvar-aval').textContent = 'Salvar avaliação';
-  document.getElementById('btn-cancelar-edit').hidden = true;
   limparFormAval();
   limparFotos();
+  fecharFormAval();
 }
 document.getElementById('btn-cancelar-edit').addEventListener('click', sairEdicao);
 

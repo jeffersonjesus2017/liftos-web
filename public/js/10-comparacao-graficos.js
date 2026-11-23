@@ -188,12 +188,38 @@ function renderTabelaAval(){
   // detalhes: só quando pedir pra ver
   const colsDetalhe = ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant']; // circunferências
 
-  // só mostra o valor registrado (sem variações nem contas); campo vazio não aparece
-  const celula = (a, k)=>{
+  // helper: encontra anterior da MESMA fase pra uma métrica específica
+  // list está desc (recente primeiro), então "anterior" = índice maior
+  const anteriorNaFase = (aval, idxDesc, k)=>{
+    const fase = aval.fase;
+    for(let i=idxDesc+1; i<list.length; i++){
+      if(fase && list[i].fase !== fase) continue;
+      const v = list[i][k];
+      if(v!==undefined && v!==null && v!=='' && !isNaN(v)) return v;
+    }
+    return null;
+  };
+
+  const celulaComVariacao = (a, idxDesc, k)=>{
     const v = a[k];
-    if(v===undefined || v===null || v==='') return '';
     const m = METRICAS[k];
-    return `<div class="cell"><span class="lbl">${m.lbl}</span><span class="val">${v} ${m.unit}</span></div>`;
+    if(v===undefined || v===null || v===''){ return ''; } // campo vazio não aparece
+    const prev = anteriorNaFase(a, idxDesc, k);
+    let pctHtml = '';
+    if(prev !== null && prev !== 0){
+      const diff = +(v - prev).toFixed(2);
+      if(Math.abs(diff) < 0.05){
+        pctHtml = `<span class="pct neutral">◆ 0 ${m.unit}</span>`;
+      } else {
+        const arrow = diff>0?'▲':'▼';
+        let cls='neutral';
+        if(m.bom==='up') cls = diff>0?'good':'bad';
+        else if(m.bom==='down') cls = diff<0?'good':'bad';
+        const sgn = diff>0?'+':'';
+        pctHtml = `<span class="pct ${cls}">${arrow} ${sgn}${diff}${m.unit}</span>`;
+      }
+    }
+    return `<div class="cell"><span class="lbl">${m.lbl}</span><span class="val">${v} ${m.unit}</span>${pctHtml}</div>`;
   };
 
   tab.innerHTML = list.map((a,i)=>{
@@ -211,13 +237,13 @@ function renderTabelaAval(){
           </div>
         </div>
         <div class="ac-resumo">
-          ${colsResumo.map(k=>celula(a,k)).join('')}
+          ${colsResumo.map(k=>celulaComVariacao(a,i,k)).join('')}
         </div>
         ${temDetalhe ? `
           <button class="ac-ver-mais" data-toggle-aval="${a.data}">${expandido?'Ver menos ▲':'Ver detalhes ▼'}</button>
           <div class="ac-detalhes">
             <div class="ac-detalhes-grid">
-              ${colsDetalhe.map(k=>celula(a,k)).join('')}
+              ${colsDetalhe.map(k=>celulaComVariacao(a,i,k)).join('')}
             </div>
           </div>
         ` : ''}
@@ -324,6 +350,7 @@ document.getElementById('btn-salvar-aval').addEventListener('click', async ()=>{
     }
   }
   saveState();
+  fecharFormAval();
   toast('Avaliação salva ✓');
   renderHistCorpo();
 });
