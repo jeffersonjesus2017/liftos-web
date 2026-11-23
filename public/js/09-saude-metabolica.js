@@ -89,72 +89,13 @@ function renderHistCorpo(){
   const list = [...state.avaliacoes].sort((a,b)=>a.data.localeCompare(b.data));
   const el = document.getElementById('aval-destaque');
   if(!list.length){
-    el.innerHTML = '<div class="empty">Nenhuma avaliação registrada ainda. Preencha o formulário abaixo com os dados da próxima consulta (peso, %G, cintura e quadril).</div>' + renderSaudeMetabolica({});
+    el.innerHTML = '<div class="empty">Nenhuma avaliação registrada ainda. Toque em “+ Nova avaliação” e preencha com os dados da próxima consulta.</div>' + renderSaudeMetabolica({});
   } else {
     const ult = list[list.length-1];
     const ant = list.length>1 ? list[list.length-2] : null;
     // helper: encontra a PRIMEIRA avaliação da MESMA FASE com aquela métrica
     // (base do ciclo atual — ignora avaliações de fases anteriores como cutting prévio)
     const faseAtual = ult.fase || null;
-    // compara sempre com a avaliação IMEDIATAMENTE ANTERIOR da mesma fase (não a primeira
-    // da fase) — o que importa no dia a dia é "o que mudou desde a última vez", não o
-    // acumulado desde o início do ciclo (isso fica em "ver evolução desde o início").
-    const valorAnterior = (k, idxAtual)=>{
-      for(let i=idxAtual-1; i>=0; i--){
-        // ignora avaliações de fase diferente da atual
-        if(faseAtual && list[i].fase && list[i].fase !== faseAtual) continue;
-        const v = list[i][k];
-        if(v!==undefined && v!==null && v!=='' && !isNaN(v)) return {val:v, data:list[i].data};
-      }
-      return null;
-    };
-    const ultIdx = list.length - 1;
-    const tile = (k)=>{
-      const v = ult[k];
-      if(v===undefined || v===null || v==='') return '';
-      const m = METRICAS[k];
-      const prev = valorAnterior(k, ultIdx);
-      let deltaHtml = '';
-      if(prev){
-        const d = v - prev.val;
-        const dAbs = Math.abs(d);
-        if(dAbs < 0.05){
-          deltaHtml = `<span class="delta flat" title="sem variação">◆ ${dAbs.toFixed(1)}</span>`;
-        } else {
-          const arrow = d>0?'▲':'▼';
-          let cls='flat';
-          if(m.bom==='up') cls = d>0?'goal-ok':'goal-bad';
-          else if(m.bom==='down') cls = d<0?'goal-ok':'goal-bad';
-          else cls = d>0?'up':'down';
-          const dataPrev = new Date(prev.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-          deltaHtml = `<span class="delta ${cls}" title="vs ${dataPrev} (${prev.val}${m.unit})">${arrow} ${dAbs.toFixed(1)}</span>`;
-        }
-      } else {
-        deltaHtml = `<span class="delta flat" title="primeira medida">● novo</span>`;
-      }
-      // alerta de faixa
-      let alerta = '';
-      const faixa = faixaRef(k);
-      if(faixa){
-        if(v < faixa.min) alerta = `<div style="font-size:10px;color:var(--warn);margin-top:4px">⚠ ${faixa.alertaMin}</div>`;
-        else if(v > faixa.max) alerta = `<div style="font-size:10px;color:var(--warn);margin-top:4px">⚠ ${faixa.alertaMax}</div>`;
-      }
-      return `<div class="tile">
-        <div class="k">${m.lbl}</div>
-        <div class="v">${v}<span class="u">${m.unit}</span></div>
-        <div style="margin-top:4px">${deltaHtml}</div>
-        ${alerta}
-      </div>`;
-    };
-    // helper: gera o bloco de tiles, só renderiza o título se tiver pelo menos 1 tile
-    const bloco = (titulo, keys)=>{
-      const tiles = keys.map(tile).filter(s=>s!=='');
-      if(tiles.length === 0) return '';
-      return `
-        <div style="margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700">${titulo}</div>
-        <div class="tiles" style="margin-top:6px">${tiles.join('')}</div>
-      `;
-    };
     const dataStr = new Date(ult.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
     // avaliação anterior (mesma fase) usada como referência dos deltas acima
     const antNaFase = ant; // já é a imediatamente anterior na lista geral; os tiles filtram por fase internamente
@@ -167,8 +108,6 @@ function renderHistCorpo(){
       <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-mute);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">
         ${dataStr}${faseLabel} · ${refDate}
       </div>
-      ${bloco('Composição', ['peso','mm','mg','pctG'])}
-      ${bloco('Circunferências', ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant'])}
       ${renderSaudeMetabolica(ult)}
       ${renderFotosRow(ult)}
       ${ult.obs?`<div style="margin-top:12px;padding:10px;background:var(--surface-2);border-radius:8px;font-size:13px;color:var(--ink-dim)"><strong>Obs:</strong> ${esc(ult.obs)}</div>`:''}
