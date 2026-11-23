@@ -98,6 +98,7 @@ function renderSessaoAtiva(){
           <span class="name">${esc(ex.nome)}</span>
           <span class="meta">${ex.reps} reps</span>
         </div>
+        ${ex.subDe ? `<div class="obs">↻ no lugar de ${esc(ex.subDe)}</div>` : (ex.extra ? '<div class="obs">+ exercício extra</div>' : '')}
         ${ex.obs ? `<div class="obs">${esc(ex.obs)}</div>` : ''}
         ${metaHtml}
         <div class="sets-grid">
@@ -118,9 +119,16 @@ function renderSessaoAtiva(){
           <button class="btn-rest" data-rest="120">2min</button>
           <button class="btn-rest" data-rest="custom">custom</button>
         </div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="ghost" data-troca="${ei}">↻ Trocar exercício</button>
+          <button class="ghost" data-rmex="${ei}">Remover exercício</button>
+        </div>
       </div>
     `;
-  }).join('');
+  }).join('') + '<button class="secondary" id="btn-add-ex" style="width:100%;margin-top:4px">+ Adicionar exercício</button>';
+  container.querySelectorAll('[data-troca]').forEach(b=> b.addEventListener('click', ()=>trocarExercicio(+b.dataset.troca)));
+  container.querySelectorAll('[data-rmex]').forEach(b=> b.addEventListener('click', ()=>removerExercicio(+b.dataset.rmex)));
+  document.getElementById('btn-add-ex').addEventListener('click', adicionarExercicio);
 
   container.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input', e=>{
@@ -177,6 +185,117 @@ function sugerirCarga(exId){
   const sugCarga = todasOk && cargaMax>0 ? cargaMax + 2.5 : cargaMax;
   return {carga:sugCarga, reps:repsNaMax, ultima:`${cargaMax}kg × ${repsNaMax}`};
 }
+
+// --------- trocar / adicionar / remover exercício na sessão em andamento ----------
+const _normEx = n => String(n||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+// exercícios já conhecidos (treinos configurados, histórico e sessão atual), sem repetir nome — alimenta a lista de sugestões
+function catalogoExercicios(){
+  const mapa = new Map();
+  const add = e => {
+    if(!e || !e.nome) return;
+    const k = _normEx(e.nome);
+    if(!k || mapa.has(k)) return;
+    const series = Number(e.series) || (Array.isArray(e.sets) ? e.sets.length : 0) || 3;
+    mapa.set(k, { id: e.id, nome: e.nome, reps: e.reps || '', obs: e.obs || '', series });
+  };
+  Object.values(state.divisoes || {}).forEach(d => (d.treinos || []).forEach(t => (t.exercicios || []).forEach(add)));
+  (state.historico || []).forEach(h => (h.exercicios || []).forEach(add));
+  if(state.sessaoAtiva) (state.sessaoAtiva.exercicios || []).forEach(add);
+  return mapa;
+}
+// monta o exercício da sessão: nome já conhecido reaproveita o id (mantém sugestão de carga e histórico); nome novo ganha id próprio
+function montarExercicio(r){
+  const conhecido = catalogoExercicios().get(_normEx(r.nome));
+  const series = Math.min(10, Math.max(1, Math.round(Number(r.series)) || 3));
+  return {
+    id: conhecido ? conhecido.id : 'x' + Date.now(),
+    nome: conhecido ? conhecido.nome : String(r.nome).trim(),
+    reps: String(r.reps || '').trim() || (conhecido && conhecido.reps) || '10-12',
+    obs: (conhecido && conhecido.obs) || '',
+    sets: Array.from({length: series}, () => ({carga:'', reps:''}))
+  };
+}
+const exTemDados = ex => ex.sets.some(st => st.carga !== '' || st.reps !== '');
+
+let _exModalResolve = null;
+function fecharModalExercicio(r){
+  document.getElementById('ex-modal-backdrop').classList.remove('show');
+  if(_exModalResolve){ _exModalResolve(r); _exModalResolve = null; }
+}
+function abrirModalExercicio({titulo, sub, series, reps}){
+  return new Promise(resolve => {
+    _exModalResolve = resolve;
+    document.getElementById('exm-titulo').textContent = titulo;
+    document.getElementById('exm-sub').textContent = sub || '';
+    document.getElementById('exm-nome').value = '';
+    document.getElementById('exm-series').value = series || 3;
+    document.getElementById('exm-reps').value = reps || '10-12';
+    const cat = catalogoExercicios();
+    document.getElementById('exm-lista').innerHTML = [...cat.values()]
+      .sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+      .map(e => `<option value="${esc(e.nome)}"></option>`).join('');
+    document.getElementById('ex-modal-backdrop').classList.add('show');
+    setTimeout(() => document.getElementById('exm-nome').focus(), 50);
+  });
+}
+document.getElementById('exm-nome').addEventListener('input', e => {
+  const c = catalogoExercicios().get(_normEx(e.target.value));
+  if(c){
+    document.getElementById('exm-series').value = c.series;
+    if(c.reps) document.getElementById('exm-reps').value = c.reps;
+  }
+});
+document.getElementById('exm-ok').addEventListener('click', () => {
+  const nome = document.getElementById('exm-nome').value.trim();
+  if(!nome){ toast('Informe o nome do exercício'); return; }
+  fecharModalExercicio({
+    nome,
+    series: document.getElementById('exm-series').value,
+    reps: document.getElementById('exm-reps').value
+  });
+});
+document.getElementById('exm-cancel').addEventListener('click', () => fecharModalExercicio(null));
+document.getElementById('ex-modal-backdrop').addEventListener('click', e => { if(e.target.id === 'ex-modal-backdrop') fecharModalExercicio(null); });
+document.addEventListener('keydown', e => {
+  if(!document.getElementById('ex-modal-backdrop').classList.contains('show')) return;
+  if(e.key === 'Escape') fecharModalExercicio(null);
+  if(e.key === 'Enter') document.getElementById('exm-ok').click();
+});
+
+async function trocarExercicio(ei){
+  const s = state.sessaoAtiva; if(!s) return;
+  const ex = s.exercicios[ei]; if(!ex) return;
+  const r = await abrirModalExercicio({ titulo:'Trocar exercício', sub:'No lugar de: ' + ex.nome, series: ex.sets.length, reps: ex.reps });
+  if(!r) return;
+  if(exTemDados(ex)){
+    const ok = await confirmar(`As séries já preenchidas de "${ex.nome}" serão descartadas ao trocar. Continuar?`, { title:'Trocar exercício', okLabel:'Trocar', warn:true });
+    if(!ok) return;
+  }
+  const novo = montarExercicio(r);
+  novo.subDe = ex.subDe || ex.nome;   // lembra qual exercício do treino foi substituído
+  if(ex.extra) novo.extra = true;
+  s.exercicios[ei] = novo;
+  saveState(); renderSessaoAtiva(); toast('Exercício trocado ✓');
+}
+async function adicionarExercicio(){
+  const s = state.sessaoAtiva; if(!s) return;
+  const r = await abrirModalExercicio({ titulo:'Adicionar exercício', sub:'Entra no fim da sessão', series:3, reps:'10-12' });
+  if(!r) return;
+  const novo = montarExercicio(r);
+  novo.extra = true;
+  s.exercicios.push(novo);
+  saveState(); renderSessaoAtiva(); toast('Exercício adicionado ✓');
+}
+async function removerExercicio(ei){
+  const s = state.sessaoAtiva; if(!s) return;
+  const ex = s.exercicios[ei]; if(!ex) return;
+  const msg = exTemDados(ex) ? `Remover "${ex.nome}"? As séries preenchidas serão perdidas.` : `Remover "${ex.nome}" desta sessão?`;
+  const ok = await confirmar(msg, { title:'Remover exercício', okLabel:'Remover', warn:true });
+  if(!ok) return;
+  s.exercicios.splice(ei, 1);
+  saveState(); renderSessaoAtiva();
+}
+// --------- fim: trocar / adicionar / remover exercício ----------
 
 document.getElementById('btn-finalizar').addEventListener('click', ()=>{
   const s = state.sessaoAtiva;

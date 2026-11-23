@@ -1007,6 +1007,24 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
   <img id="pv-img" alt="">
 </div>
 
+<div class="modal-backdrop" id="ex-modal-backdrop" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h3 id="exm-titulo">Adicionar exercício</h3>
+    <div class="msg" id="exm-sub"></div>
+    <label>Exercício (digite ou escolha um já cadastrado)</label>
+    <input type="text" id="exm-nome" list="exm-lista" autocomplete="off" placeholder="Ex: Leg press 45°">
+    <datalist id="exm-lista"></datalist>
+    <div class="row two" style="margin-top:8px">
+      <div><label>Séries</label><input type="number" id="exm-series" min="1" max="10" value="3"></div>
+      <div><label>Reps alvo</label><input type="text" id="exm-reps" placeholder="10-12"></div>
+    </div>
+    <div class="actions">
+      <button class="secondary" id="exm-cancel">Cancelar</button>
+      <button class="primary" id="exm-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true">
   <div class="modal">
     <h3 id="modal-title">Confirmar</h3>
