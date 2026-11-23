@@ -184,7 +184,7 @@ function renderTabelaAval(){
   if(!list.length){ tab.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:var(--ink-mute);font-style:italic">Nenhuma avaliação ainda</div>'; return; }
 
   // resumo direto: o que você olha todo dia
-  const colsResumo = ['mm','mg','pctG']; // só o que importa: massa magra, massa gorda e % de gordura
+  const colsResumo = ['peso','mm','mg','pctG']; // peso, massa magra, massa gorda e % de gordura
   // detalhes: só quando pedir pra ver
   const colsDetalhe = ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant']; // circunferências
 
