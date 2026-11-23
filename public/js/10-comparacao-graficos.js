@@ -184,9 +184,9 @@ function renderTabelaAval(){
   if(!list.length){ tab.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:var(--ink-mute);font-style:italic">Nenhuma avaliação ainda</div>'; return; }
 
   // resumo direto: o que você olha todo dia
-  const colsResumo = ['peso','pctG','mm','mg'];
+  const colsResumo = ['mm','mg','pctG']; // só o que importa: massa magra, massa gorda e % de gordura
   // detalhes: só quando pedir pra ver
-  const colsDetalhe = ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant','d_peitoral','d_triceps','d_abdom','d_coxa','d_axilar','d_subesc','d_supra','d_soma'];
+  const colsDetalhe = ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant']; // circunferências
 
   // helper: encontra anterior da MESMA fase pra uma métrica específica
   // list está desc (recente primeiro), então "anterior" = índice maior
@@ -294,7 +294,7 @@ document.getElementById('btn-salvar-aval').addEventListener('click', async ()=>{
   const peso = num('av-peso');
   const mm = num('av-mm');
   const mg = num('av-mg');
-  // consistência: se peso + MG informados mas MM vazio, calcula; e vice-versa
+  // o app só registra e mostra: nada é calculado aqui (os números vêm da avaliação profissional)
   const nova = {
     data, peso, mm, mg,
     pctG: num('av-pct'),
@@ -304,32 +304,11 @@ document.getElementById('btn-salvar-aval').addEventListener('click', async ()=>{
     c_quadril: num('av-c-quadril'),
     c_coxa: num('av-c-coxa'),
     c_pant: num('av-c-pant'),
-    d_peitoral: num('av-d-peitoral'),
-    d_triceps: num('av-d-triceps'),
-    d_abdom: num('av-d-abdom'),
-    d_coxa: num('av-d-coxa'),
-    d_axilar: num('av-d-axilar'),
-    d_subesc: num('av-d-subesc'),
-    d_supra: num('av-d-supra'),
-    d_soma: num('av-d-soma'),
     fase: document.getElementById('av-fase').value,
     obs: document.getElementById('av-obs').value.trim()
   };
-  // soma automática das 7 dobras se não preenchida
-  if(nova.d_soma === ''){
-    const dobras = ['d_peitoral','d_triceps','d_abdom','d_coxa','d_axilar','d_subesc','d_supra'];
-    const preenchidas = dobras.filter(k=>nova[k]!=='');
-    if(preenchidas.length === 7){
-      nova.d_soma = +preenchidas.reduce((s,k)=>s+Number(nova[k]),0).toFixed(1);
-    }
-  }
-  if(peso==='' && mm==='' && mg==='' && nova.pctG==='' && nova.c_braco==='' && nova.c_cintura==='' && nova.d_soma==='' && Object.keys(_tempFotos).length===0){
+  if(peso==='' && mm==='' && mg==='' && nova.pctG==='' && nova.c_braco==='' && nova.c_cintura==='' && Object.keys(_tempFotos).length===0){
     toast('Preencha ao menos um campo'); return;
-  }
-  // auto-complete: se peso e %G informados, calcula MM e MG
-  if(peso!=='' && nova.pctG!=='' && mg==='' && mm===''){
-    nova.mg = +(peso * nova.pctG/100).toFixed(1);
-    nova.mm = +(peso - nova.mg).toFixed(1);
   }
   // fotos
   if(Object.keys(_tempFotos).length > 0){
@@ -340,6 +319,9 @@ document.getElementById('btn-salvar-aval').addEventListener('click', async ()=>{
   if(_editingAvalDate){
     const idxEdit = state.avaliacoes.findIndex(a=>a.data===_editingAvalDate);
     if(idxEdit >= 0){
+      // dobras já registradas (campos d_*) não têm mais tela de edição: preserva o que existe
+      const antiga = state.avaliacoes[idxEdit];
+      Object.keys(antiga).filter(k=>/^d_/.test(k)).forEach(k=>{ nova[k] = antiga[k]; });
       state.avaliacoes[idxEdit] = nova;
     }
     sairEdicao();
@@ -349,6 +331,7 @@ document.getElementById('btn-salvar-aval').addEventListener('click', async ()=>{
     if(idx>=0){
       const okSobre = await confirmar(`Já existe avaliação em ${data}. Sobrescrever?`, {okLabel:'Sobrescrever'});
       if(!okSobre) return;
+      Object.keys(state.avaliacoes[idx]).filter(k=>/^d_/.test(k)).forEach(k=>{ nova[k] = state.avaliacoes[idx][k]; });
       state.avaliacoes[idx] = nova;
     } else {
       state.avaliacoes.push(nova);
@@ -378,7 +361,6 @@ function limparFormAval(){
   const ids = [
     'av-peso','av-mm','av-mg','av-pct',
     'av-c-braco','av-c-peito','av-c-cintura','av-c-quadril','av-c-coxa','av-c-pant',
-    'av-d-peitoral','av-d-triceps','av-d-abdom','av-d-coxa','av-d-axilar','av-d-subesc','av-d-supra','av-d-soma',
     'av-obs'
   ];
   ids.forEach(id=>{

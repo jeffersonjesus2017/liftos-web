@@ -168,7 +168,6 @@ function renderHistCorpo(){
         ${dataStr}${faseLabel} · ${refDate}
       </div>
       ${bloco('Composição', ['peso','mm','mg','pctG'])}
-      ${bloco('Dobras cutâneas', ['d_soma','d_peitoral','d_triceps','d_abdom','d_coxa','d_axilar','d_subesc','d_supra'])}
       ${bloco('Circunferências', ['c_braco','c_peito','c_cintura','c_quadril','c_coxa','c_pant'])}
       ${renderSaudeMetabolica(ult)}
       ${renderFotosRow(ult)}

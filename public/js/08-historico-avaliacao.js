@@ -256,9 +256,6 @@ function iniciarEdicaoAval(data){
   setVal('av-peso','peso'); setVal('av-mm','mm'); setVal('av-mg','mg'); setVal('av-pct','pctG');
   setVal('av-c-braco','c_braco'); setVal('av-c-peito','c_peito'); setVal('av-c-cintura','c_cintura');
   setVal('av-c-quadril','c_quadril'); setVal('av-c-coxa','c_coxa'); setVal('av-c-pant','c_pant');
-  setVal('av-d-peitoral','d_peitoral'); setVal('av-d-triceps','d_triceps'); setVal('av-d-abdom','d_abdom');
-  setVal('av-d-coxa','d_coxa'); setVal('av-d-axilar','d_axilar'); setVal('av-d-subesc','d_subesc');
-  setVal('av-d-supra','d_supra'); setVal('av-d-soma','d_soma');
   setVal('av-obs','obs');
   document.getElementById('av-fase').value = a.fase || 'bulk';
   // fotos

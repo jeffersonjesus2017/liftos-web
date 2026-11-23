@@ -221,7 +221,6 @@ async function gerarRelatorioPDF(){
     if(ultAval.mm) linhasAval.push(`Massa magra: ${ultAval.mm} kg`);
     if(ultAval.mg) linhasAval.push(`Massa gorda: ${ultAval.mg} kg`);
     if(ultAval.pctG) linhasAval.push(`% Gordura: ${ultAval.pctG}%`);
-    if(ultAval.d_soma) linhasAval.push(`Soma 7 dobras: ${ultAval.d_soma} mm`);
     if(linhasAval.length) { doc.text(linhasAval.join(' · '), 15, y); y += 5; }
     // circunferências
     const circ = [];
@@ -256,7 +255,7 @@ async function gerarRelatorioPDF(){
         }
         return null;
       };
-      const vars = [mk('Peso','peso','kg'), mk('MM','mm','kg'), mk('MG','mg','kg'), mk('%G','pctG','%'), mk('Dobras','d_soma','mm')].filter(Boolean);
+      const vars = [mk('Peso','peso','kg'), mk('MM','mm','kg'), mk('MG','mg','kg'), mk('%G','pctG','%')].filter(Boolean);
       if(vars.length){
         doc.text(vars.join(' · '), 15, y); y += 5;
       }

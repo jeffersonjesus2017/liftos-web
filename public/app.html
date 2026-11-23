@@ -245,7 +245,7 @@ svg.chart .axis{stroke:var(--line);stroke-width:1}
 .aval-card .ac-data{font-weight:700;font-size:13px}
 .aval-card .ac-actions{display:flex;align-items:center;gap:10px}
 .aval-card .ac-actions button{appearance:none;background:transparent;border:0;cursor:pointer;font-size:13px;padding:0 2px}
-.aval-card .ac-resumo{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:0}
+.aval-card .ac-resumo{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:0}
 .aval-card .ac-resumo .cell{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0}
 .aval-card .ac-resumo .lbl{font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);font-weight:700}
 .aval-card .ac-resumo .val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--ink)}
@@ -696,16 +696,6 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
             <option value="mg">Massa gorda (kg)</option>
             <option value="pctG">% Gordura</option>
           </optgroup>
-          <optgroup label="Dobras cutâneas (mm)">
-            <option value="d_soma">Soma 7 dobras</option>
-            <option value="d_peitoral">Peitoral</option>
-            <option value="d_triceps">Tríceps</option>
-            <option value="d_abdom">Abdominal</option>
-            <option value="d_coxa">Coxa</option>
-            <option value="d_axilar">Axilar média</option>
-            <option value="d_subesc">Subescapular</option>
-            <option value="d_supra">Supra-ilíaca</option>
-          </optgroup>
           <optgroup label="Circunferências (cm)">
             <option value="c_cintura">Cintura</option>
             <option value="c_braco">Braço</option>
@@ -760,17 +750,6 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
           <div><label>Quadril</label><input type="number" id="av-c-quadril" step="0.1" placeholder="100"></div>
           <div><label>Coxa</label><input type="number" id="av-c-coxa" step="0.1" placeholder="58"></div>
           <div><label>Panturrilha</label><input type="number" id="av-c-pant" step="0.1" placeholder="38"></div>
-        </div>
-        <h3 style="margin-top:14px">Dobras cutâneas (mm) — adipometria</h3>
-        <div class="body-form">
-          <div><label>Peitoral</label><input type="number" id="av-d-peitoral" step="0.1" placeholder="7"></div>
-          <div><label>Tríceps</label><input type="number" id="av-d-triceps" step="0.1" placeholder="7"></div>
-          <div><label>Abdominal</label><input type="number" id="av-d-abdom" step="0.1" placeholder="15"></div>
-          <div><label>Coxa</label><input type="number" id="av-d-coxa" step="0.1" placeholder="10"></div>
-          <div><label>Axilar média</label><input type="number" id="av-d-axilar" step="0.1" placeholder="12"></div>
-          <div><label>Subescapular</label><input type="number" id="av-d-subesc" step="0.1" placeholder="19"></div>
-          <div><label>Supra-ilíaca</label><input type="number" id="av-d-supra" step="0.1" placeholder="18"></div>
-          <div><label>Soma 7 dobras</label><input type="number" id="av-d-soma" step="0.1" placeholder="auto"></div>
         </div>
         <h3 style="margin-top:14px">Fotos de physique (opcional)</h3>
         <div class="body-form" id="av-fotos-wrap">
