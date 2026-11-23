@@ -51,11 +51,11 @@ function renderCustomModal(){
     `;
   }).join('');
   container.innerHTML = `
-    <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">Edite as gramas, remova ou adicione itens:</div>
+    <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">Edite as quantidades (g ou ml), remova ou adicione itens:</div>
     <div class="custom-meal">${itensHtml}</div>
     <div class="custom-add">
       <input type="text" id="custom-busca" placeholder="buscar alimento..." autocomplete="off" value="${esc(_customSelectedFood ? _customSelectedFood.n : '')}">
-      <input type="number" id="custom-qty" value="100" min="1" step="1" placeholder="g">
+      <input type="number" id="custom-qty" value="100" min="1" step="1" placeholder="g/ml">
       <button type="button" id="custom-btn-add" class="rm" style="color:var(--good, #3a8f5a);font-size:20px" title="Adicionar">+</button>
       <div class="custom-results" id="custom-results" hidden></div>
     </div>
@@ -63,7 +63,7 @@ function renderCustomModal(){
       <label style="font-size:11px;color:var(--ink-mute)">Ou quantas unidades?</label>
       <input type="number" id="custom-unidades" min="0" step="0.5" placeholder="ex: 2" style="width:70px;font-size:12px;padding:5px 6px;text-align:center">
     </div>
-    <div id="custom-selected-info" style="font-size:11px;color:var(--ink-mute);margin-top:4px">${_customSelectedFood ? `Por 100g: ${_customSelectedFood.kc} kcal · ${_customSelectedFood.p}g P · ${_customSelectedFood.c}g C · ${_customSelectedFood.g}g G${_customSelectedFood.un ? ` · 1 unidade ≈ ${_customSelectedFood.un}g` : ''}` : ''}</div>
+    <div id="custom-selected-info" style="font-size:11px;color:var(--ink-mute);margin-top:4px">${_customSelectedFood ? `Por 100${medidaAlimento(_customSelectedFood)}: ${_customSelectedFood.kc} kcal · ${_customSelectedFood.p}g P · ${_customSelectedFood.c}g C · ${_customSelectedFood.g}g G${_customSelectedFood.un ? ` · 1 unidade ≈ ${_customSelectedFood.un}${medidaAlimento(_customSelectedFood)}` : ''}` : ''}</div>
     <div class="custom-total">
       <span>TOTAL</span>
       <span>${Math.round(tot.kc)} kcal · ${Math.round(tot.p)}P ${Math.round(tot.c)}C ${Math.round(tot.g)}G</span>
@@ -208,7 +208,7 @@ function renderPlano(){
       const factor = it.g/100;
       const ikc = f.kc*factor, ip = f.p*factor, ic = f.c*factor, ig = f.g*factor;
       kc+=ikc; p+=ip; c+=ic; g+=ig;
-      const qty = f.un ? `${Math.round(it.g/f.un)} un` : `${it.g}g`;
+      const qty = f.un ? `${Math.round(it.g/f.un)} un` : `${it.g}${medidaAlimento(f)}`;
       return `<div class="item"><span>${qty} ${esc(f.n)}</span><span class="kc">${Math.round(ikc)} kcal</span></div>`;
     }).join('');
     const btnLabel = info ? 'Adicionar novamente' : 'Adicionar ao diário';
@@ -355,7 +355,7 @@ function renderDieta(){
         : '';
       return `
         <div class="dg-item">
-          <span class="nome">${Math.round(r.grams)}g ${esc(r.nome)}</span>
+          <span class="nome">${Math.round(r.grams)}${medidaAlimento(r.foodId ? allFoods().find(x=>x.id===r.foodId) : null)} ${esc(r.nome)}</span>
           ${horaItem}
           <span class="kc">${Math.round(r.kcal)} kcal</span>
           <button class="rm" data-rm="${idx}" title="Remover">×</button>

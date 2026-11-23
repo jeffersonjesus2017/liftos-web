@@ -1,5 +1,7 @@
 // --------- dieta ----------
 function allFoods(){ return [...FOODS, ...state.alimentosCustom, ...TACO_FOODS]; }
+// medida do alimento: 'ml' para líquidos (food.u === 'ml'), 'g' para o resto. Para o cálculo, 1 ml conta como 1 g.
+function medidaAlimento(f){ return f && f.u === 'ml' ? 'ml' : 'g'; }
 
 // Busca sem acento/maiúscula; começa-com vem antes de contém; curados/próprios antes da TACO (ordem estável)
 function normBusca(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
@@ -29,9 +31,11 @@ searchInput.addEventListener('input', ()=>{
       resultsBox.hidden = true;
       const unidadeWrap = document.getElementById('food-unidade-wrap');
       const unidadesInput = document.getElementById('food-unidades');
-      let info = `Por 100g: ${selectedFood.kc} kcal · ${selectedFood.p}g P · ${selectedFood.c}g C · ${selectedFood.g}g G`;
+      const um = medidaAlimento(selectedFood);
+      document.getElementById('food-qty-label').textContent = `Quantidade (${um})`;
+      let info = `Por 100${um}: ${selectedFood.kc} kcal · ${selectedFood.p}g P · ${selectedFood.c}g C · ${selectedFood.g}g G`;
       if(selectedFood.un){
-        info += ` · 1 unidade ≈ ${selectedFood.un}g`;
+        info += ` · 1 unidade ≈ ${selectedFood.un}${um}`;
         unidadeWrap.hidden = false;
         unidadesInput.value = '';
       } else {
@@ -94,6 +98,7 @@ document.getElementById('btn-add-custom').addEventListener('click', ()=>{
     id:'u'+Date.now(), n:nome,
     kc: Math.round(kcal/f), p:+(p/f).toFixed(1), c:+(c/f).toFixed(1), g:+(g/f).toFixed(1)
   };
+  if(document.getElementById('cf-medida').value === 'ml') novo.u = 'ml'; // líquido: quantidades em ml
   if(un>0) novo.un = un; // peso de 1 unidade (g) — permite lançar "2 unidades" em vez de pesar
   // micros opcionais do rótulo (mesma porção dos demais valores), guardados por 100 g em novo.m
   const m = {};
@@ -107,6 +112,7 @@ document.getElementById('btn-add-custom').addEventListener('click', ()=>{
   const avisoBaixo = novo.kc < 15;
   ['cf-nome','cf-kcal','cf-p','cf-c','cf-g','cf-un','cf-fib','cf-na'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cf-porcao').value = 100;
+  document.getElementById('cf-medida').value = 'g';
   toast(avisoBaixo ? `⚠ Salvo com só ${novo.kc} kcal/100 g — confira se a porção (g) está certa` : 'Alimento salvo ✓');
 });
 

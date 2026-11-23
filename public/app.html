@@ -824,7 +824,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <input type="number" id="food-unidades" min="0" step="0.5" placeholder="ex: 2">
       </div>
       <div class="row two" style="margin-top:10px">
-        <div><label>Quantidade (g/ml)</label><input type="number" id="food-qty" value="100" min="1" step="1"></div>
+        <div><label id="food-qty-label">Quantidade (g ou ml)</label><input type="number" id="food-qty" value="100" min="1" step="1"></div>
         <div style="display:flex;align-items:flex-end"><button class="primary" id="btn-add-food" style="width:100%">Adicionar</button></div>
       </div>
       <div id="food-selected" style="margin-top:8px;font-size:12px;color:var(--ink-mute)"></div>
@@ -842,7 +842,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
         <div style="margin-top:10px">
           <div class="row two">
             <div><label>Nome</label><input type="text" id="cf-nome" placeholder="Ex: Marmita fit"></div>
-            <div><label>Porção (g) — a que os valores abaixo se referem</label><input type="number" id="cf-porcao" value="100"></div>
+            <div><label>Porção (g ou ml) — a que os valores abaixo se referem</label><input type="number" id="cf-porcao" value="100"></div>
+          </div>
+          <div style="margin-top:8px"><label>Medir em</label>
+            <select id="cf-medida"><option value="g">gramas (g)</option><option value="ml">mililitros (ml) — líquidos</option></select>
           </div>
           <div class="row three" style="margin-top:8px">
             <div><label>Kcal</label><input type="number" id="cf-kcal" step="0.1"></div>
@@ -851,7 +854,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:14px 0}
           </div>
           <div class="row two" style="margin-top:8px">
             <div><label>Gord (g)</label><input type="number" id="cf-g" step="0.1"></div>
-            <div><label>Peso de 1 unidade (g) — opcional</label><input type="number" id="cf-un" step="1" placeholder="ex: 50 (se for tipo ovo, fatia...)"></div>
+            <div><label>Tamanho de 1 unidade (g ou ml) — opcional</label><input type="number" id="cf-un" step="1" placeholder="ex: 50 (se for tipo ovo, fatia...)"></div>
           </div>
           <div class="row two" style="margin-top:8px">
             <div><label>Fibra (g) — opcional, do rótulo</label><input type="number" id="cf-fib" step="0.1" min="0"></div>
