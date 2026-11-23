@@ -475,6 +475,7 @@ function renderHoje(){
   renderDashboardSemana();
   const saldo = Math.round(t.kcal - r.meta);
   document.getElementById('saldo-kcal').textContent = (saldo>=0?'+':'') + saldo;
+  document.getElementById('saldo-kcal').closest('.tile').classList.toggle('saldo-ok', saldo >= 0); // verde ao atingir ou passar a meta
   document.getElementById('meta-kcal-hoje').textContent = r.meta;
   document.getElementById('consumido-kcal').textContent = Math.round(t.kcal);
 
