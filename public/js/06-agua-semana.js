@@ -345,17 +345,19 @@ function renderDashboardSemana(){
     }
   });
 
-  // 3. Hidratação média
+  // 3. Hidratação média — média sobre os dias já decorridos da semana
+  // (segunda até hoje), contando dia sem registro como 0. Dias futuros da
+  // semana ficam de fora. Assim bate com a sparkline, que já usa 0 nos vazios.
   const metaAgua = state.perfil.aguaMeta || 3000;
-  let somaAgua = 0, diasComAgua = 0;
+  const hojeStr = localDateStr(new Date());
+  let somaAgua = 0, diasDecorridos = 0;
   dias.forEach(d=>{
+    if(d.data > hojeStr) return; // ignora dias futuros da semana
+    diasDecorridos++;
     const regs = state.agua[d.data];
-    if(regs && regs.length){
-      diasComAgua++;
-      somaAgua += regs.reduce((s,r)=>s+r.ml,0);
-    }
+    if(regs && regs.length) somaAgua += regs.reduce((s,r)=>s+r.ml,0);
   });
-  const mediaAgua = diasComAgua > 0 ? Math.round(somaAgua / diasComAgua) : 0;
+  const mediaAgua = diasDecorridos > 0 ? Math.round(somaAgua / diasDecorridos) : 0;
   const pctAgua = Math.round(mediaAgua / metaAgua * 100);
 
   // 4. Variação peso (compara última avaliação com uma de 7 dias atrás, aproximado)
